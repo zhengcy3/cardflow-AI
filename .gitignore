@@ -1,0 +1,14 @@
+node_modules/
+.idea/
+.m2/
+.npm-cache/
+dist/
+target/
+.DS_Store
+data/*.db
+data/*.db-*
+**/data/*.db
+**/data/*.db-*
+storage/outputs/*
+!storage/outputs/.gitkeep
+*.log

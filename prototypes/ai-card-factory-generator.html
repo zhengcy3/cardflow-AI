@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI 知识卡片工厂 - 原型</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #070608;
+        --panel: rgba(18, 19, 23, 0.84);
+        --panel-strong: rgba(28, 29, 34, 0.94);
+        --field: rgba(255, 255, 255, 0.045);
+        --field-focus: rgba(255, 255, 255, 0.07);
+        --line: rgba(255, 255, 255, 0.1);
+        --line-strong: rgba(255, 255, 255, 0.18);
+        --text: #f4f1ea;
+        --muted: #8f96a3;
+        --soft: #c4c8ce;
+        --green: #33d59c;
+        --amber: #ffc857;
+        --coral: #ff6b6b;
+        --cyan: #76e4f7;
+        --rose: #f08bb3;
+        --shadow: 0 26px 80px rgba(0, 0, 0, 0.48);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background:
+          radial-gradient(1160px 780px at -8% -12%, rgba(54, 43, 185, 0.64) 0%, rgba(46, 35, 110, 0.42) 34%, transparent 68%),
+          radial-gradient(1120px 720px at 108% -10%, rgba(181, 45, 58, 0.54) 0%, rgba(105, 31, 42, 0.32) 38%, transparent 72%),
+          radial-gradient(900px 600px at 52% 16%, rgba(178, 92, 139, 0.24) 0%, rgba(70, 42, 78, 0.16) 46%, transparent 78%),
+          radial-gradient(980px 720px at 86% 68%, rgba(82, 24, 32, 0.32) 0%, rgba(36, 14, 20, 0.2) 42%, transparent 74%),
+          radial-gradient(860px 720px at 8% 70%, rgba(31, 26, 78, 0.38) 0%, rgba(16, 13, 36, 0.22) 45%, transparent 78%),
+          linear-gradient(180deg, #18142a 0%, #211726 30%, #1a1119 56%, #100b10 78%, #080709 100%),
+          var(--bg);
+        background-attachment: fixed;
+        color: var(--text);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(680px 420px at 19% 13%, rgba(134, 119, 255, 0.12), transparent 72%),
+          radial-gradient(620px 380px at 47% 17%, rgba(255, 172, 207, 0.08), transparent 74%),
+          radial-gradient(760px 420px at 84% 12%, rgba(255, 112, 118, 0.09), transparent 76%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.026), transparent 24%);
+        mix-blend-mode: soft-light;
+        opacity: 0.7;
+        animation: glow-drift 24s ease-in-out infinite alternate;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.014) 1px, transparent 1px),
+          radial-gradient(ellipse at 50% 12%, rgba(255, 255, 255, 0.08), transparent 48%);
+        background-size: 86px 86px, 86px 86px, 100% 100%;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.04) 58%, transparent 100%);
+        opacity: 0.12;
+      }
+
+      @keyframes glow-drift {
+        0% {
+          transform: translate3d(0, 0, 0) scale(1);
+          opacity: 0.76;
+        }
+
+        45% {
+          transform: translate3d(1.2vw, -0.6vh, 0) scale(1.03);
+          opacity: 0.9;
+        }
+
+        100% {
+          transform: translate3d(-0.8vw, 0.8vh, 0) scale(1.01);
+          opacity: 0.82;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        body::before,
+        body::after {
+          animation: none;
+        }
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        width: min(1340px, calc(100% - 48px));
+        margin: 0 auto;
+        padding: 26px 0 92px;
+      }
+
+      .topbar {
+        width: min(960px, 100%);
+        margin: 0 auto 54px;
+        min-height: 68px;
+        padding: 12px 18px 12px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 34px;
+        background: rgba(20, 15, 22, 0.78);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 190px;
+      }
+
+      .logo {
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background:
+          conic-gradient(from 20deg, #33d59c, #76e4f7, #f08bb3, #ffc857, #33d59c);
+        box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.06);
+      }
+
+      .logo span {
+        width: 17px;
+        height: 17px;
+        border-radius: 5px;
+        background: #111318;
+      }
+
+      .brand-name {
+        font-size: 15px;
+        font-weight: 750;
+        letter-spacing: 0;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--soft);
+        font-size: 13px;
+      }
+
+      .nav-item,
+      .status-pill,
+      .user-pill,
+      .menu-button {
+        border: 1px solid transparent;
+        background: transparent;
+        color: inherit;
+      }
+
+      .nav-item {
+        padding: 9px 13px;
+        border-radius: 18px;
+      }
+
+      .nav-item:hover,
+      .menu-button:hover {
+        background: rgba(255, 255, 255, 0.055);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .status-pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 13px;
+        border-radius: 18px;
+        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .dot {
+        display: inline-block;
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 16px var(--green);
+      }
+
+      .account {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.18)),
+          #16181d;
+        border: 2px solid #050607;
+      }
+
+      .user-pill {
+        padding: 8px 12px;
+        border-radius: 16px;
+        color: #ffb0a8;
+        background: rgba(255, 107, 107, 0.14);
+      }
+
+      .menu-button {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        color: var(--text);
+        font-size: 20px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        gap: 24px;
+        align-items: start;
+      }
+
+      .headline {
+        margin: 0 0 52px;
+        padding-left: 26px;
+      }
+
+      .engine {
+        width: max-content;
+        margin-bottom: 22px;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        background: rgba(7, 8, 11, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--soft);
+        font-size: 12px;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin: 0;
+        font-size: clamp(42px, 5vw, 72px);
+        line-height: 1.02;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        display: inline-block;
+        padding: 0 0.04em;
+        background:
+          linear-gradient(90deg, #fff8e7 0%, #ffc857 32%, #f08bb3 68%, #76e4f7 100%);
+        background-size: 180% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        text-shadow:
+          0 0 22px rgba(255, 200, 87, 0.22),
+          0 0 42px rgba(240, 139, 179, 0.14);
+        animation: title-glow 3.8s ease-in-out infinite;
+      }
+
+      @keyframes title-glow {
+        0%,
+        100% {
+          background-position: 0% 50%;
+          filter: brightness(1);
+          text-shadow:
+            0 0 18px rgba(255, 200, 87, 0.16),
+            0 0 34px rgba(240, 139, 179, 0.1);
+        }
+
+        50% {
+          background-position: 100% 50%;
+          filter: brightness(1.18);
+          text-shadow:
+            0 0 24px rgba(255, 200, 87, 0.32),
+            0 0 52px rgba(118, 228, 247, 0.18);
+        }
+      }
+
+      .subline {
+        margin: 16px 0 0;
+        color: rgba(244, 241, 234, 0.52);
+        font-size: 18px;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        gap: 24px;
+      }
+
+      .left-stack,
+      .right-stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .panel.pad {
+        padding: 24px;
+      }
+
+      .panel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .panel-title b {
+        color: var(--soft);
+        font-weight: 600;
+      }
+
+      .field-grid {
+        display: grid;
+        gap: 20px;
+      }
+
+      .field label {
+        display: block;
+        margin-bottom: 8px;
+        color: #a9b0ba;
+        font-size: 13px;
+      }
+
+      .field label strong {
+        color: var(--coral);
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+      }
+
+      .text-input,
+      .small-input {
+        border: 1px solid transparent;
+        border-radius: 11px;
+        background: var(--field);
+        transition:
+          border-color 0.16s ease,
+          background 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+
+      .text-input {
+        min-height: 58px;
+        padding: 8px 12px;
+        font-size: 30px;
+        font-weight: 760;
+      }
+
+      .small-input {
+        min-height: 48px;
+        padding: 9px 12px;
+        font-size: 18px;
+      }
+
+      .prompt-area {
+        min-height: 82px;
+        resize: vertical;
+        padding: 14px;
+        border: 1px solid var(--line-strong);
+        border-radius: 11px;
+        background: var(--field);
+        color: var(--soft);
+        transition:
+          border-color 0.16s ease,
+          background 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+
+      .text-input:focus,
+      .small-input:focus,
+      .prompt-area:focus {
+        border-color: rgba(255, 200, 87, 0.42);
+        background: var(--field-focus);
+        box-shadow: 0 0 0 3px rgba(255, 200, 87, 0.08);
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 13px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .mode-radio {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .segment {
+        display: grid;
+        place-items: center;
+        min-height: 38px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: var(--soft);
+        cursor: pointer;
+        transition:
+          background 0.16s ease,
+          color 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+
+      .segment:hover {
+        background: rgba(255, 255, 255, 0.045);
+        color: var(--text);
+      }
+
+      .segment.active {
+        color: #141312;
+        background: #fff5e6;
+        box-shadow:
+          0 6px 18px rgba(255, 245, 230, 0.12),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.52);
+      }
+
+      #mode-topic:checked ~ .segmented label[for="mode-topic"],
+      #mode-article:checked ~ .segmented label[for="mode-article"] {
+        color: #141312;
+        background: #fff5e6;
+        box-shadow:
+          0 6px 18px rgba(255, 245, 230, 0.12),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.52);
+      }
+
+      .mode-content {
+        display: none;
+      }
+
+      #mode-topic:checked ~ .topic-mode,
+      #mode-article:checked ~ .article-mode {
+        display: grid;
+      }
+
+      .article-text {
+        min-height: 126px;
+      }
+
+      .option-row {
+        display: grid;
+        gap: 10px;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        min-height: 34px;
+        padding: 0 13px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--soft);
+        font-size: 13px;
+      }
+
+      .chip.active {
+        border-color: rgba(255, 200, 87, 0.56);
+        background: rgba(255, 200, 87, 0.1);
+        color: var(--text);
+      }
+
+      .engines {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .engine-card {
+        min-height: 88px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.035);
+        color: var(--soft);
+        text-align: left;
+      }
+
+      .engine-card.active {
+        border-color: rgba(118, 228, 247, 0.54);
+        background: rgba(118, 228, 247, 0.09);
+        color: var(--text);
+      }
+
+      .engine-name {
+        display: block;
+        font-size: 14px;
+        font-weight: 760;
+      }
+
+      .engine-desc {
+        display: block;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .formats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .format-card {
+        position: relative;
+        min-height: 112px;
+        padding: 18px 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.035);
+        color: var(--soft);
+        text-align: center;
+      }
+
+      .format-card.active {
+        border-color: rgba(255, 200, 87, 0.58);
+        background: rgba(255, 200, 87, 0.08);
+        color: var(--text);
+      }
+
+      .format-card.active::after {
+        content: "";
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--amber);
+        box-shadow: 0 0 16px rgba(255, 200, 87, 0.65);
+      }
+
+      .format-icon {
+        width: 42px;
+        height: 42px;
+        margin: 0 auto 12px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .format-title {
+        display: block;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .format-ratio {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .preview-card {
+        overflow: hidden;
+        min-height: 280px;
+      }
+
+      .preview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 18px 22px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .preview-stage {
+        padding: 10px 22px 28px;
+        display: grid;
+        place-items: center;
+        perspective: 900px;
+      }
+
+      .mock-card {
+        width: 230px;
+        aspect-ratio: 3 / 4;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        overflow: hidden;
+        border-radius: 16px;
+        background:
+          radial-gradient(circle at 84% 14%, rgba(255, 205, 95, 0.46), transparent 20%),
+          linear-gradient(145deg, #fff8eb 0%, #f4eadc 56%, #e9dccd 100%);
+        color: #181411;
+        box-shadow:
+          0 22px 56px rgba(0, 0, 0, 0.48),
+          0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+        transform: rotate(-1.6deg) rotateY(-5deg);
+      }
+
+      .mock-card::before {
+        content: "";
+        position: absolute;
+        inset: 10px;
+        border: 1px solid rgba(24, 20, 17, 0.08);
+        border-radius: 12px;
+        pointer-events: none;
+      }
+
+      .mock-card::after {
+        content: "";
+        position: absolute;
+        right: 18px;
+        bottom: 18px;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background:
+          linear-gradient(135deg, rgba(255, 200, 87, 0.95), rgba(240, 139, 179, 0.9)),
+          #ffc857;
+        opacity: 0.28;
+      }
+
+      .mock-label {
+        width: max-content;
+        padding: 5px 8px;
+        border-radius: 999px;
+        background: rgba(204, 63, 63, 0.1);
+        color: #c83232;
+        font-size: 10px;
+        font-weight: 850;
+        letter-spacing: 0;
+      }
+
+      .mock-card h3 {
+        margin: 18px 0 12px;
+        max-width: 170px;
+        font-size: 27px;
+        line-height: 1.04;
+        letter-spacing: 0;
+      }
+
+      .mock-card p {
+        margin: 0 0 16px;
+        color: #5f574e;
+        font-size: 11px;
+        line-height: 1.62;
+      }
+
+      .mock-points {
+        display: grid;
+        gap: 7px;
+        margin-top: auto;
+        padding-top: 14px;
+        border-top: 1px solid rgba(24, 20, 17, 0.1);
+      }
+
+      .mock-point {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #2c2620;
+        font-size: 10px;
+        font-weight: 720;
+      }
+
+      .mock-point i {
+        width: 6px;
+        height: 6px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: #d44747;
+        box-shadow: 0 0 0 4px rgba(212, 71, 71, 0.1);
+      }
+
+      .mock-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 18px;
+        color: #8b8176;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .style-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .style-option {
+        min-height: 78px;
+        padding: 14px 10px;
+        border-radius: 11px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--soft);
+        text-align: left;
+      }
+
+      .style-option.active {
+        border-color: rgba(240, 139, 179, 0.72);
+        color: var(--text);
+        background: rgba(240, 139, 179, 0.12);
+      }
+
+      .style-name {
+        display: block;
+        font-size: 14px;
+        font-weight: 720;
+      }
+
+      .style-desc {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .template-list {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .template-thumb {
+        flex: 1;
+        min-height: 62px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background:
+          linear-gradient(135deg, rgba(255, 200, 87, 0.84), rgba(240, 139, 179, 0.84)),
+          #222;
+      }
+
+      .template-thumb:nth-child(2) {
+        background:
+          linear-gradient(135deg, #eff3f4, #a8b7c7),
+          #eee;
+      }
+
+      .template-thumb:nth-child(3) {
+        background:
+          linear-gradient(135deg, #1b2931, #33d59c),
+          #222;
+      }
+
+      .bottom-bar {
+        position: fixed;
+        left: 50%;
+        bottom: 34px;
+        z-index: 5;
+        width: min(520px, calc(100% - 40px));
+        min-height: 70px;
+        padding: 10px 12px 10px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        border-radius: 32px;
+        border: 1px solid var(--line-strong);
+        background: rgba(8, 9, 11, 0.9);
+        box-shadow: var(--shadow);
+        transform: translateX(-50%);
+        backdrop-filter: blur(18px);
+      }
+
+      .quota {
+        display: flex;
+        gap: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .quota b {
+        color: var(--amber);
+      }
+
+      .generate-button {
+        min-width: 184px;
+        min-height: 52px;
+        border: 0;
+        border-radius: 28px;
+        background: #fffaf2;
+        color: #111;
+        font-size: 15px;
+        font-weight: 800;
+        box-shadow: 0 10px 26px rgba(255, 250, 242, 0.18);
+      }
+
+      .helper {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 980px) {
+        .page {
+          width: min(100% - 28px, 760px);
+          padding-top: 16px;
+        }
+
+        .topbar,
+        .hero,
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .topbar {
+          border-radius: 22px;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          margin-bottom: 36px;
+        }
+
+        .nav {
+          width: 100%;
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+
+        .headline {
+          margin-bottom: 28px;
+          padding-left: 0;
+        }
+
+        .formats,
+        .engines {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 560px) {
+        .account {
+          width: 100%;
+          justify-content: space-between;
+        }
+
+        h1 {
+          font-size: 42px;
+        }
+
+        .panel.pad {
+          padding: 18px;
+        }
+
+        .text-input {
+          font-size: 24px;
+        }
+
+        .formats,
+        .engines,
+        .style-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .bottom-bar {
+          align-items: stretch;
+          flex-direction: column;
+          border-radius: 24px;
+        }
+
+        .generate-button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <nav class="topbar" aria-label="主导航">
+        <div class="brand">
+          <div class="logo" aria-hidden="true"><span></span></div>
+          <div class="brand-name">CardFlow AI</div>
+        </div>
+
+        <div class="nav">
+          <button class="status-pill" type="button"><span class="dot"></span> 系统正常</button>
+          <button class="nav-item" type="button">生成记录</button>
+          <button class="nav-item" type="button">使用记录</button>
+          <button class="nav-item" type="button">模板中心</button>
+        </div>
+
+        <div class="account">
+          <div class="avatar" aria-label="用户头像"></div>
+          <button class="user-pill" type="button">免费版</button>
+          <button class="menu-button" type="button" aria-label="打开菜单">≡</button>
+        </div>
+      </nav>
+
+      <section class="hero" aria-label="AI 生成器">
+        <div>
+          <header class="headline">
+            <div class="engine"><span class="dot"></span> ENGINE V1.0 已就绪</div>
+            <h1>打造<span>高转化</span>知识卡片</h1>
+            <p class="subline">输入主题或文章，30 秒生成适合小红书发布的知识卡片。</p>
+          </header>
+        </div>
+        <div class="helper">今日已生成 6 张，剩余 4 次免费额度</div>
+      </section>
+
+      <section class="workspace">
+        <div class="left-stack">
+          <section class="panel pad">
+            <div class="panel-title">
+              <b>内容核心</b>
+              <span>STRUCTURED INPUT</span>
+            </div>
+
+            <div class="field-grid">
+              <input class="mode-radio" type="radio" name="generation-mode" id="mode-topic" checked />
+              <input class="mode-radio" type="radio" name="generation-mode" id="mode-article" />
+              <div class="segmented" aria-label="生成方式">
+                <label class="segment" for="mode-topic">主题生成</label>
+                <label class="segment" for="mode-article">文章生成</label>
+              </div>
+
+              <div class="mode-content topic-mode field-grid">
+                <div class="field">
+                  <label for="topic">主题标题 <strong>*</strong></label>
+                  <input class="text-input" id="topic" value="为什么学了很多却还是没成长？" />
+                </div>
+
+                <div class="field">
+                  <label for="context">副标题 / 上下文</label>
+                  <input class="small-input" id="context" value="消费知识不等于成长" />
+                </div>
+
+                <div class="field">
+                  <label for="prompt">补充说明</label>
+                  <textarea class="prompt-area" id="prompt">希望内容适合小红书知识博主，观点要清晰，语言要短句化，适合做 3-5 页轮播。</textarea>
+                </div>
+              </div>
+
+              <div class="mode-content article-mode field-grid">
+                <div class="field">
+                  <label for="article">文章正文 <strong>*</strong></label>
+                  <textarea class="prompt-area article-text" id="article">粘贴一篇长文，AI 会先提炼核心观点，再拆成适合发布的知识卡片结构。</textarea>
+                </div>
+
+                <div class="option-row">
+                  <label>提炼目标</label>
+                  <div class="chips">
+                    <button class="chip active" type="button">总结观点</button>
+                    <button class="chip" type="button">拆成轮播</button>
+                    <button class="chip" type="button">生成封面文案</button>
+                  </div>
+                </div>
+
+                <div class="option-row">
+                  <label>生成页数</label>
+                  <div class="chips">
+                    <button class="chip active" type="button">自动</button>
+                    <button class="chip" type="button">3 页</button>
+                    <button class="chip" type="button">5 页</button>
+                    <button class="chip" type="button">7 页</button>
+                  </div>
+                </div>
+
+                <div class="option-row">
+                  <label>内容风格</label>
+                  <div class="chips">
+                    <button class="chip active" type="button">专业简洁</button>
+                    <button class="chip" type="button">小红书风</button>
+                    <button class="chip" type="button">知识付费风</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel pad">
+            <div class="panel-title">
+              <b>输出格式</b>
+              <span>FORMAT</span>
+            </div>
+
+            <div class="engines" aria-label="出图方式">
+              <button class="engine-card active" type="button">
+                <span class="engine-name">精准卡片</span>
+                <span class="engine-desc">HTML 模板渲染，文字准确，适合知识卡片。</span>
+              </button>
+              <button class="engine-card" type="button">
+                <span class="engine-name">AI 创意图</span>
+                <span class="engine-desc">调用生图模型，适合封面视觉和氛围图。</span>
+              </button>
+              <button class="engine-card" type="button">
+                <span class="engine-name">混合模式</span>
+                <span class="engine-desc">AI 背景 + HTML 文案排版，适合 V1。</span>
+              </button>
+            </div>
+
+            <div class="formats">
+              <button class="format-card active" type="button">
+                <span class="format-icon">3:4</span>
+                <span class="format-title">小红书</span>
+                <span class="format-ratio">单页 / 轮播</span>
+              </button>
+              <button class="format-card" type="button">
+                <span class="format-icon">16:9</span>
+                <span class="format-title">YouTube</span>
+                <span class="format-ratio">横版封面</span>
+              </button>
+              <button class="format-card" type="button">
+                <span class="format-icon">16:9</span>
+                <span class="format-title">B站封面</span>
+                <span class="format-ratio">横版视频</span>
+              </button>
+              <button class="format-card" type="button">
+                <span class="format-icon">9:16</span>
+                <span class="format-title">抖音封面</span>
+                <span class="format-ratio">竖屏视频</span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <aside class="right-stack">
+          <section class="panel preview-card">
+            <div class="preview-header">
+              <span>实时预览</span>
+              <span>小红书 3:4</span>
+            </div>
+            <div class="preview-stage">
+              <article class="mock-card">
+                <div class="mock-label">知识卡片 01</div>
+                <h3>学了很多，为什么没成长？</h3>
+                <p>消费知识不等于成长，真正改变结果的是行动反馈闭环。</p>
+                <div class="mock-points">
+                  <div class="mock-point"><i></i><span>收藏不等于行动</span></div>
+                  <div class="mock-point"><i></i><span>知道不等于做到</span></div>
+                  <div class="mock-point"><i></i><span>输入不等于输出</span></div>
+                </div>
+                <div class="mock-footer">
+                  <span>CardFlow AI</span>
+                  <span>01 / 06</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel pad">
+            <div class="panel-title">
+              <b>卡片风格</b>
+              <span>STYLE</span>
+            </div>
+
+            <div class="style-grid">
+              <button class="style-option active" type="button">
+                <span class="style-name">小红书高亮</span>
+                <span class="style-desc">强标题 / 重点突出</span>
+              </button>
+              <button class="style-option" type="button">
+                <span class="style-name">极简苹果风</span>
+                <span class="style-desc">大留白 / 高级感</span>
+              </button>
+              <button class="style-option" type="button">
+                <span class="style-name">商业简报</span>
+                <span class="style-desc">数据化 / 理性</span>
+              </button>
+              <button class="style-option" type="button">
+                <span class="style-name">个人品牌</span>
+                <span class="style-desc">V1 解锁</span>
+              </button>
+            </div>
+
+            <div class="template-list" aria-label="推荐模板缩略图">
+              <div class="template-thumb"></div>
+              <div class="template-thumb"></div>
+              <div class="template-thumb"></div>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <div class="bottom-bar">
+      <div class="quota">
+        <span><b>●</b> 免费额度 4</span>
+        <span><b>1</b> 次消耗</span>
+      </div>
+      <button class="generate-button" type="button">生成卡片 →</button>
+    </div>
+  </body>
+</html>

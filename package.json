@@ -1,0 +1,11 @@
+{
+  "name": "cardflow-ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:web": "npm --prefix apps/web run build",
+    "test:api": "mvn -f apps/api/pom.xml test",
+    "dev:api": "mvn -f apps/api/pom.xml spring-boot:run"
+  }
+}
