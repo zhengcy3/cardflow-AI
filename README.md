@@ -5,9 +5,10 @@ CardFlow AI 是一个本地优先的 AI 知识卡片生成器 MVP。
 当前目标是先跑通一条核心链路：
 
 ```text
-输入主题或文章
+输入主题
 → AI 生成结构化内容 JSON
-→ HTML 模板渲染
+→ AI 生成动态 HTML
+→ HTML 安全校验
 → Playwright 截图
 → 本地输出 PNG
 → 作品历史记录
@@ -18,7 +19,7 @@ CardFlow AI 是一个本地优先的 AI 知识卡片生成器 MVP。
 - 前端：Vue 3、Vite、TypeScript
 - 后端：Spring Boot、Java 17、SQLite
 - 存储：本地文件，默认输出到 `storage/outputs`
-- AI：先使用 Mock Provider，后续替换为真实 LLM Provider
+- AI：DeepSeek Provider，API Key 通过环境变量注入
 - 截图渲染：Playwright
 
 ## 目录结构
@@ -38,8 +39,11 @@ prototypes/     已确认的静态原型
 后端命令建议从项目根目录执行，这样 SQLite 和生成图片会落在预期目录：
 
 ```bash
+export DEEPSEEK_API_KEY=你的 DeepSeek API Key
 npm run dev:api
 ```
+
+DeepSeek 输出长度默认配置为 `cardflow.llm.max-tokens: 5000`，用于支持动态 HTML/CSS 生成。
 
 后端地址：
 
@@ -111,23 +115,26 @@ mvn -f apps/api/pom.xml exec:java -e -Dexec.mainClass=com.microsoft.playwright.C
 - 默认本地用户
 - SQLite 表结构初始化
 - 默认模板种子数据
-- Mock 内容生成 API
 - LLM Provider 抽象层
+- DeepSeek 主题生成 Provider
+- AI 动态 HTML 卡片生成协议
 - 作品创建、列表、详情、更新、删除 API
-- HTML 模板渲染
-- Playwright 本地 PNG 截图输出
+- HTML 模板渲染和动态 HTML 渲染
+- Playwright 本地 PNG 截图输出，使用 2 倍设备像素提升清晰度
 - 多页轮播作品按页输出 PNG
 - Vue 生成器页面
-- 主题生成 / 文章生成切换
+- 主题生成
+- 文章生成入口暂时禁用，等待真实 AI 规则接入
 - 小红书、YouTube、B站、抖音输出比例选择
 - HTML 精准卡片、AI 创意图、混合模式的产品入口
 - 最近作品列表
-- 右侧预览和生成图片链接
-- 结构化 JSON 编辑，并支持保存后重新渲染
+- 右侧未生成前展示卡片占位预览，生成后展示真实 PNG，并使用应用内弹窗预览大图
+- 动态 HTML 内容生成，并自动保存、渲染到作品历史
 
 ## 当前还没完成
 
-- 真实 LLM Provider 接入
+- 文章生成真实 AI 接入
+- MiniMax Provider 接入
 - 三方 AI 生图模型接入
 - 登录和用户体系
 - 会员、额度、订单能力
@@ -137,14 +144,13 @@ mvn -f apps/api/pom.xml exec:java -e -Dexec.mainClass=com.microsoft.playwright.C
 
 ## 当前验证状态
 
-目前已经做过不依赖下载的静态检查，包括 `package.json` JSON 解析和关键源码链路检查。
+目前已验证：
 
-因为依赖安装之前受网络或沙箱影响没有完整成功，所以还没有完成以下验证：
+- `mvn -f apps/api/pom.xml test`
+- `npm run build:web`
 
-- `npm install`
-- `npm run build`
-- `mvn test`
+还没有完成以下验证：
+
+- 使用真实 `DEEPSEEK_API_KEY` 做一次端到端主题生成
 - 前后端联调
 - Playwright 实际 PNG 渲染
-
-下一步建议先安装依赖并跑通本地启动，再接真实 LLM。

@@ -11,3 +11,9 @@ cardflow:
     output-dir: storage/outputs
   app:
     default-user-id: local-user
+  llm:
+    provider: deepseek
+    base-url: https://api.deepseek.com
+    model: deepseek-v4-flash
+    api-key: sk-35d6529874d6471090cfef9998ba07ee
+    max-tokens: 5000

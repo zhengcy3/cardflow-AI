@@ -15,9 +15,10 @@ public final class RenderModels {
    * 截图画布尺寸。
    *
    * @param width 画布宽度，单位 px
-   * @param height 画布高度，单位 px
+   * @param height 画布高度，单位 CSS px
+   * @param pixelRatio PNG 输出倍率
    */
-  public record Canvas(int width, int height) {}
+  public record Canvas(int width, int height, int pixelRatio) {}
 
   /**
    * 单张卡片渲染内容。
