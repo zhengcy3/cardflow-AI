@@ -13,7 +13,6 @@
 - Spring Boot 3.5.x; Java 17; Maven
 - Spring AI 1.1.x (latest stable in 1.1 line)
 - Skill names MUST match `^[a-z0-9]+(\.[a-z0-9-]+)+$`
-- Skill names MUST match `^[a-z0-9]+(\.[a-z0-9-]+)+$`
 - Skill directory name MUST equal `meta.yaml.name`
 - All Skills MUST be loaded at startup; failure to load is fail-fast (`IllegalStateException`)
 - `ReadSkillTool` MUST return error JSON on failure, never throw
@@ -1602,7 +1601,7 @@ class GenerationServiceTest {
 }
 ```
 
-**Note:** Spring AI 1.0.x `ChatClient` uses a fluent spec builder; the exact mocking approach depends on the API. If `chatClient.prompt()` returns a builder-like object and `.system()` / `.user()` chain, mock accordingly. The implementation in Step 10.3 will use the actual API; mock what that code calls.
+**Note:** Spring AI 1.1.x `ChatClient` uses a fluent spec builder; the exact mocking approach depends on the API. If `chatClient.prompt()` returns a builder-like object and `.system()` / `.user()` chain, mock accordingly. The implementation in Step 10.3 will use the actual API; mock what that code calls.
 
 - [ ] **Step 10.2: Run test to verify it fails**
 
@@ -1795,7 +1794,7 @@ public class GenerationService {
 }
 ```
 
-**Note:** `ChatClient.prompt()` in Spring AI 1.0.x returns a `PromptSpec` builder; the exact chain (`.system(String)`, `.user(String)`, `.call().content()`) is the public API. If the API differs slightly, adjust to match (e.g. `chatClient.prompt().system(...).user(...).call().content()`).
+**Note:** `ChatClient.prompt()` in Spring AI 1.1.x returns a `PromptSpec` builder; the exact chain (`.system(String)`, `.user(String)`, `.call().content()`) is the public API. If the API differs slightly, adjust to match (e.g. `chatClient.prompt().system(...).user(...).call().content()`).
 
 - [ ] **Step 10.4: Create ChatClientConfig**
 
