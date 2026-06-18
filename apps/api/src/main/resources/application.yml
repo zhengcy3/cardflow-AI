@@ -5,6 +5,14 @@ spring:
   datasource:
     url: jdbc:sqlite:data/cardflow.db
     driver-class-name: org.sqlite.JDBC
+  ai:
+    openai:
+      base-url: https://api.deepseek.com/v1
+      api-key: ${DEEPSEEK_API_KEY}
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.85
 
 cardflow:
   storage:
