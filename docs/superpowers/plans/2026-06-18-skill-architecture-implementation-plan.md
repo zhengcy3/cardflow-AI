@@ -6,11 +6,13 @@
 
 **Architecture:** Three layers — (1) domain layer with `SkillRegistry` scanning `classpath:skills/**/meta.yaml` + `SKILL.md`, (2) Spring AI adapter with `SkillRoutingAdvisor` injecting Skills summaries and `ReadSkillTool` letting the LLM load full Skill content on demand, (3) refactored `GenerationService` using `ChatClient` directly (replacing `LlmProvider`/`DeepSeekLlmProvider`). Backward-compatible: HTTP API contracts and DB schema unchanged.
 
-**Tech Stack:** Spring Boot 3.3.5, Spring AI 1.0.x (compatibility verified in Task 1), Jackson YAML, JUnit 5 + AssertJ, Maven.
+**Tech Stack:** Spring Boot 3.5.x, Spring AI 1.1.x (latest stable), Jackson YAML, JUnit 5 + AssertJ, Maven.
 
 ## Global Constraints
 
-- Spring Boot 3.3.5; Java 17; Maven
+- Spring Boot 3.5.x; Java 17; Maven
+- Spring AI 1.1.x (latest stable in 1.1 line)
+- Skill names MUST match `^[a-z0-9]+(\.[a-z0-9-]+)+$`
 - Skill names MUST match `^[a-z0-9]+(\.[a-z0-9-]+)+$`
 - Skill directory name MUST equal `meta.yaml.name`
 - All Skills MUST be loaded at startup; failure to load is fail-fast (`IllegalStateException`)
@@ -78,7 +80,67 @@ apps/api/src/test/java/ai/cardflow/api/llm/DeepSeekLlmProviderTest.java
 
 ---
 
-## Task 1: Verify Spring AI compatibility and add dependencies
+## Task 0: Upgrade Spring Boot 3.3.5 → 3.5.x
+
+**Files:**
+- Modify: `apps/api/pom.xml`
+
+**Interfaces:**
+- Consumes: Spring Boot 3.3.5 (current)
+- Produces: Spring Boot 3.5.x (latest stable on Maven Central); existing test suite still passes
+
+Spring AI 1.1.x requires Spring Boot 3.4.x or 3.5.x. We pick 3.5.x for the latest patch. This task upgrades Spring Boot first, so Task 1 can confidently use the latest Spring AI 1.1.x.
+
+### Step 0.1: Find the latest Spring Boot 3.5.x patch version
+
+Run:
+```bash
+curl -s "https://repo1.maven.org/maven2/org/springframework/boot/spring-boot-starter-parent/" \
+  | grep -oE 'href="3\.5\.[0-9]+/"' | sort -u
+```
+
+Pick the **highest 3.5.x** (e.g. `3.5.0` or later patch). Write the chosen version to use in Step 0.2.
+
+### Step 0.2: Edit `apps/api/pom.xml`
+
+Change the parent version:
+
+```xml
+<parent>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-parent</artifactId>
+  <version>3.5.0</version>  <!-- replace 3.3.5 with the version chosen in Step 0.1 -->
+  <relativePath />
+</parent>
+```
+
+### Step 0.3: Verify dependencies resolve and compile
+
+Run: `cd apps/api && mvn -q -DskipTests compile`
+Expected: BUILD SUCCESS. Spring Boot 3.5.x may pull newer transitive dependencies — if any version conflict is reported, surface it to the user before continuing.
+
+### Step 0.4: Run existing test suite
+
+Run: `cd apps/api && mvn -q test`
+Expected: PASS for all existing tests.
+
+Common Spring Boot 3.4/3.5 deprecations to watch for:
+- `@MockBean` → `@MockitoBean` (since Spring Boot 3.4)
+- `@SpyBean` → `@MockitoSpyBean` (since Spring Boot 3.4)
+- `RestTemplate` API: still present, no breaking changes in 3.5.x
+
+If any test fails due to API drift, apply the standard 3.4/3.5 migration pattern for that test and commit the fix in this task.
+
+### Step 0.5: Commit
+
+```bash
+git add apps/api/pom.xml
+git commit -m "build: upgrade Spring Boot 3.3.5 to 3.5.x"
+```
+
+---
+
+## Task 1: Add Spring AI dependencies
 
 **Files:**
 - Modify: `apps/api/pom.xml`
@@ -86,20 +148,18 @@ apps/api/src/test/java/ai/cardflow/api/llm/DeepSeekLlmProviderTest.java
 - Test: existing test suite must still pass
 
 **Interfaces:**
-- Consumes: existing Spring Boot 3.3.5 parent
+- Consumes: Spring Boot 3.5.x from Task 0
 - Produces: `spring-ai-openai` on classpath; `spring.ai.openai` config block; existing tests pass
 
-### Step 1.1: Verify Spring AI version compatibility with Spring Boot 3.3.5
+### Step 1.1: Find the latest Spring AI 1.1.x patch version
 
-Before editing pom.xml, confirm which Spring AI version supports Spring Boot 3.3.5. Run from repo root:
-
+Run:
 ```bash
-curl -s "https://repo1.maven.org/maven2/org/springframework/ai/spring-ai-bom/" | grep -oE 'href="[0-9]+\.[0-9]+\.[0-9]+/"' | sort -u
+curl -s "https://repo1.maven.org/maven2/org/springframework/ai/spring-ai-bom/" \
+  | grep -oE 'href="1\.1\.[0-9]+/"' | sort -u
 ```
 
-Pick the **highest 1.0.x version** (e.g. `1.0.6` or whatever is listed). Confirm via its `spring-ai-bom-VERSION.pom` that it does NOT pin Spring Boot to 3.4+. If only Spring AI 1.1.x is available, proceed but check the BOM — if it requires Spring Boot 3.4+, **stop and inform the user** (requires upgrading Spring Boot, separate change). Spring AI 2.x requires Spring Boot 4.x and is not usable here.
-
-Write the chosen version into the task notes for use in Step 1.2.
+Pick the **highest 1.1.x** (e.g. `1.1.0` or later patch). Write it down for Step 1.2. Do NOT pick 2.x — that requires Spring Boot 4.x.
 
 ### Step 1.2: Edit `apps/api/pom.xml`
 
@@ -108,7 +168,7 @@ Add Spring AI BOM in `<dependencyManagement>` and the openai starter + jackson-d
 ```xml
 <properties>
   <java.version>17</java.version>
-  <spring-ai.version>1.0.6</spring-ai.version>  <!-- use the version verified in Step 1.1 -->
+  <spring-ai.version>1.1.0</spring-ai.version>  <!-- use the version verified in Step 1.1 -->
 </properties>
 
 <dependencyManagement>
@@ -1908,9 +1968,8 @@ git commit -m "chore: final verification adjustments"
 - §8 error handling → covered in Tasks 5, 8, 9, 10
 - §9.1 unit tests → Tasks 3-9, 10
 - §9.3 sanity test → Task 6
-- §10 migration steps → Task ordering matches spec Step 1→5
-- §13 files affected → all listed
+- §10 migration steps → Task 0 (Spring Boot upgrade) precedes Task 1 (Spring AI deps); remaining Tasks 2-12 match spec Step 1→5
 
-**Risk acknowledgment:** Spring AI 1.1.x doesn't support Spring Boot 3.3.5. Task 1.1 verifies the available 1.0.x version; if 1.0.x also doesn't support 3.3.5 cleanly, the user must approve a Spring Boot upgrade as a separate change before proceeding.
+**Risk acknowledgment:** Spring Boot is upgraded from 3.3.5 to 3.5.x in Task 0 before any Spring AI dependency is added. Task 1 then uses Spring AI 1.1.x which officially supports Spring Boot 3.4.x and 3.5.x. The original 1.0.x-vs-3.3.5 incompatibility risk is resolved by the order of these tasks.
 
-**Known API drift risk:** Spring AI 1.0.x `ChatClient` and `BaseAdvisor` APIs may have minor naming differences from the spec's pseudocode. Tasks 7, 8, 10 include API-adjustment steps (e.g., test verifies behavior, implementation may need `.system()` vs `.systemText()`, etc.).
+**Known API drift risk:** Spring AI 1.1.x `ChatClient`, `BaseAdvisor`, and `ChatClientRequest` APIs may have minor naming differences from the spec's pseudocode. Tasks 7, 8, 10 include API-adjustment steps (e.g., test verifies behavior, implementation may need `.system(String)` vs `.systemText(String)`, etc.). The exact API surface should be confirmed against the chosen 1.1.x version's javadoc during implementation.
