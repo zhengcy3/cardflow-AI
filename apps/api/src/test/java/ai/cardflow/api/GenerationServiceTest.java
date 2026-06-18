@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class GenerationServiceTest {
   @TempDir
@@ -50,7 +51,8 @@ class GenerationServiceTest {
     when(requestSpec.call()).thenReturn(responseSpec);
     when(responseSpec.content()).thenReturn(validJson);
 
-    generationService = new GenerationService(jdbc, properties, chatClient, new HtmlCardValidator(), new ObjectMapper());
+    generationService = new GenerationService(jdbc, properties, chatClient, new HtmlCardValidator(), new ObjectMapper(), "deepseek-chat");
+    ReflectionTestUtils.setField(generationService, "modelName", "deepseek-chat");
   }
 
   @Test

@@ -53,11 +53,15 @@ public class ReadSkillTool implements ToolCallback {
       JsonNode args = MAPPER.readTree(jsonArguments);
       JsonNode nameNode = args.get("name");
       if (nameNode == null || !nameNode.isTextual()) {
-        return "{\"error\":\"Invalid arguments: missing 'name' field\"}";
+        return errorJson("Invalid arguments: missing 'name' field");
       }
       return registry.readFullContent(nameNode.asText());
     } catch (Exception e) {
-      return "{\"error\":\"" + e.getClass().getSimpleName() + ": " + e.getMessage() + "\"}";
+      return errorJson(e.getClass().getSimpleName() + ": " + (e.getMessage() == null ? "" : e.getMessage()));
     }
+  }
+
+  private static String errorJson(String detail) {
+    return "{\"error\":\"" + detail.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";
   }
 }

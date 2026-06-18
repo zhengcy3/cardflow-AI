@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class GenerationService {
-  private static final String MODEL_NAME = "deepseek-chat";
+  private final String modelName;
 
   private final JdbcTemplate jdbc;
   private final AppProperties properties;
@@ -35,13 +36,15 @@ public class GenerationService {
     AppProperties properties,
     ChatClient chatClient,
     HtmlCardValidator validator,
-    ObjectMapper objectMapper
+    ObjectMapper objectMapper,
+    @Value("${spring.ai.openai.chat.options.model:deepseek-chat}") String modelName
   ) {
     this.jdbc = jdbc;
     this.properties = properties;
     this.chatClient = chatClient;
     this.validator = validator;
     this.objectMapper = objectMapper;
+    this.modelName = modelName;
   }
 
   public GenerateContentResponse generate(GenerateContentRequest request) {
@@ -91,7 +94,7 @@ public class GenerationService {
           taskId,
           "content_generation",
           1,
-          MODEL_NAME,
+          modelName,
           finishedAt
       );
       return new GenerateContentResponse(taskId, contentJson);
