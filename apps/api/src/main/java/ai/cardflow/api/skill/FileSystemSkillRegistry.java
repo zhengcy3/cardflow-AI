@@ -2,6 +2,7 @@ package ai.cardflow.api.skill;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,8 +12,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 
@@ -32,9 +37,10 @@ public class FileSystemSkillRegistry implements SkillRegistry {
   /**
    * Spring 容器使用的构造函数。
    */
+  @Autowired
   public FileSystemSkillRegistry(
     ResourceLoader loader,
-    ObjectMapper yamlMapper,
+    @Qualifier("yamlObjectMapper") ObjectMapper yamlMapper,
     SkillSummaryFormatter formatter
   ) {
     this(loader, yamlMapper, formatter, "classpath:skills/**/meta.yaml", null);
@@ -89,42 +95,70 @@ public class FileSystemSkillRegistry implements SkillRegistry {
     String fileSystemRoot
   ) {
     Map<String, SkillMeta> map = new LinkedHashMap<>();
-    List<Path> metaFiles = discoverMetaFiles(loader, fileSystemRoot, pattern);
-    metaFiles.sort((a, b) -> a.getParent().getFileName().toString().compareTo(b.getParent().getFileName().toString()));
-    for (Path metaFile : metaFiles) {
-      SkillMeta meta = parseMeta(yamlMapper, metaFile);
+    List<SkillSource> sources = discoverMetaFiles(loader, fileSystemRoot, pattern);
+    sources.sort((a, b) -> a.dirName().compareTo(b.dirName()));
+    for (SkillSource source : sources) {
+      SkillMeta meta = parseMeta(yamlMapper, source.resource());
       if (map.containsKey(meta.name())) {
         throw new IllegalStateException("Duplicate skill name: " + meta.name());
       }
-      validateMeta(meta, metaFile);
+      validateMeta(meta, source.dirName());
       map.put(meta.name(), meta);
     }
     return map;
   }
 
-  private List<Path> discoverMetaFiles(ResourceLoader loader, String fileSystemRoot, String pattern) {
+  /** 一次扫描结果:meta.yaml 的 Resource + 它所在的 Skill 目录名。 */
+  private record SkillSource(Resource resource, String dirName) {}
+
+  private List<SkillSource> discoverMetaFiles(ResourceLoader loader, String fileSystemRoot, String pattern) {
     if (fileSystemRoot != null) {
       try {
-        List<Path> result = new ArrayList<>();
+        List<SkillSource> result = new ArrayList<>();
         Path root = Path.of(fileSystemRoot);
         if (!Files.exists(root)) {
           throw new IllegalStateException("Skill root not found: " + fileSystemRoot);
         }
         try (var stream = Files.walk(root)) {
-          stream.filter(p -> p.getFileName().toString().equals("meta.yaml")).forEach(result::add);
+          stream.filter(p -> p.getFileName().toString().equals("meta.yaml"))
+            .forEach(p -> {
+              try {
+                result.add(new SkillSource(
+                  new UrlResource(p.toUri()),
+                  p.getParent().getFileName().toString()
+                ));
+              } catch (IOException e) {
+                throw new IllegalStateException("Failed to read skill resource: " + p, e);
+              }
+            });
         }
         return result;
       } catch (IOException e) {
         throw new IllegalStateException("Failed to scan skills directory: " + fileSystemRoot, e);
       }
     }
-    // Production path: use classpath glob. Simplified implementation: load classpath:skills/ directly.
-    Resource dir = loader.getResource("classpath:skills/");
-    List<Path> result = new ArrayList<>();
+    // Production path: PathMatchingResourcePatternResolver handles both filesystem
+    // classpath (IDE / mvn spring-boot:run) and jar:nested: classpath (fat JAR).
+    List<SkillSource> result = new ArrayList<>();
     try {
-      Path skillsDir = Path.of(dir.getURI());
-      try (var stream = Files.walk(skillsDir)) {
-        stream.filter(p -> p.getFileName().toString().equals("meta.yaml")).forEach(result::add);
+      PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver(loader);
+      Resource[] resources = resolver.getResources("classpath:skills/**/meta.yaml");
+      for (Resource resource : resources) {
+        if (!resource.exists()) {
+          continue;
+        }
+        // Extract parent dir name from URL like ".../skills/cardflow.html-card-generator/meta.yaml"
+        String url = resource.getURL().toString();
+        int skillsIdx = url.lastIndexOf("/skills/");
+        String dirName = "unknown";
+        if (skillsIdx >= 0) {
+          String after = url.substring(skillsIdx + "/skills/".length());
+          int slash = after.indexOf('/');
+          if (slash > 0) {
+            dirName = after.substring(0, slash);
+          }
+        }
+        result.add(new SkillSource(resource, dirName));
       }
       return result;
     } catch (IOException e) {
@@ -132,9 +166,10 @@ public class FileSystemSkillRegistry implements SkillRegistry {
     }
   }
 
-  private SkillMeta parseMeta(ObjectMapper yamlMapper, Path metaFile) {
-    try {
-      Map<String, Object> raw = yamlMapper.readValue(metaFile.toFile(), Map.class);
+  private SkillMeta parseMeta(ObjectMapper yamlMapper, Resource metaResource) {
+    try (InputStream in = metaResource.getInputStream()) {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> raw = yamlMapper.readValue(in, Map.class);
       String name = (String) raw.get("name");
       String description = (String) raw.get("description");
       String whenToApply = (String) raw.get("whenToApply");
@@ -142,26 +177,24 @@ public class FileSystemSkillRegistry implements SkillRegistry {
       List<String> tags = (List<String>) raw.getOrDefault("tags", List.of());
       String version = String.valueOf(raw.getOrDefault("version", "1"));
       if (name == null || description == null || whenToApply == null) {
-        throw new IllegalStateException("Skill meta.yaml missing required field: " + metaFile);
+        throw new IllegalStateException("Skill meta.yaml missing required field: " + metaResource);
       }
-      Path skillDir = metaFile.getParent();
-      Path skillMd = skillDir.resolve("SKILL.md");
-      if (!Files.exists(skillMd) || Files.size(skillMd) == 0) {
-        throw new IllegalStateException("Missing SKILL.md at " + skillMd);
+      String metaUrl = metaResource.getURL().toString();
+      String skillMdUrl = metaUrl.substring(0, metaUrl.lastIndexOf('/') + 1) + "SKILL.md";
+      Resource skillMdResource = new UrlResource(skillMdUrl);
+      if (!skillMdResource.exists() || skillMdResource.contentLength() == 0) {
+        throw new IllegalStateException("Missing SKILL.md at " + skillMdUrl);
       }
-      Resource contentResource = new org.springframework.core.io.UrlResource(skillMd.toUri());
-      return new SkillMeta(name, description, whenToApply, tags, version, contentResource);
+      return new SkillMeta(name, description, whenToApply, tags, version, skillMdResource);
     } catch (IOException e) {
-      throw new IllegalStateException("Failed to parse meta.yaml: " + metaFile, e);
+      throw new IllegalStateException("Failed to parse meta.yaml: " + metaResource, e);
     }
   }
 
-  private void validateMeta(SkillMeta meta, Path metaFile) {
-    Path skillDir = metaFile.getParent();
-    String dirName = skillDir.getFileName().toString();
+  private void validateMeta(SkillMeta meta, String dirName) {
     if (!dirName.equals(meta.name())) {
       throw new IllegalStateException(
-        "Skill directory name " + dirName + " does not match directory name in meta.yaml: " + metaFile
+        "Skill directory name " + dirName + " does not match directory name in meta.yaml: " + meta.name()
       );
     }
     if (!NAME_PATTERN.matcher(meta.name()).matches()) {
