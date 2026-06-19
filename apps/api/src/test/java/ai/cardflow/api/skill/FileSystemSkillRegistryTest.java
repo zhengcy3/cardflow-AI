@@ -3,8 +3,8 @@ package ai.cardflow.api.skill;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.yaml.snakeyaml.Yaml;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,8 +35,8 @@ class FileSystemSkillRegistryTest {
     Files.writeString(skillDir.resolve("SKILL.md"), "# body\n");
 
     ResourceLoader loader = new DefaultResourceLoader();
-    ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-    registry = new FileSystemSkillRegistry(loader, yamlMapper, new SkillSummaryFormatter(), "skills/**/meta.yaml", tempDir.toString());
+    Yaml yamlReader = new Yaml();
+    registry = new FileSystemSkillRegistry(loader, yamlReader, new SkillSummaryFormatter(), "skills/**/meta.yaml", tempDir.toString());
   }
 
   @Test
@@ -87,9 +87,9 @@ class FileSystemSkillRegistryTest {
     Files.writeString(bad.resolve("SKILL.md"), "body");
 
     ResourceLoader loader = new DefaultResourceLoader();
-    ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    Yaml yamlReader = new Yaml();
 
-    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlMapper, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
+    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlReader, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
       .isInstanceOf(IllegalStateException.class)
       .hasMessageContaining("Invalid skill name");
   }
@@ -107,9 +107,9 @@ class FileSystemSkillRegistryTest {
     Files.writeString(skill.resolve("SKILL.md"), "body");
 
     ResourceLoader loader = new DefaultResourceLoader();
-    ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    Yaml yamlReader = new Yaml();
 
-    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlMapper, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
+    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlReader, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
       .isInstanceOf(IllegalStateException.class)
       .hasMessageContaining("does not match directory");
   }
@@ -126,9 +126,9 @@ class FileSystemSkillRegistryTest {
         """);
 
     ResourceLoader loader = new DefaultResourceLoader();
-    ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    Yaml yamlReader = new Yaml();
 
-    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlMapper, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
+    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlReader, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
       .isInstanceOf(IllegalStateException.class)
       .hasMessageContaining("Missing SKILL.md");
   }
@@ -148,9 +148,9 @@ class FileSystemSkillRegistryTest {
     }
 
     ResourceLoader loader = new DefaultResourceLoader();
-    ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    Yaml yamlReader = new Yaml();
 
-    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlMapper, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
+    assertThatThrownBy(() -> new FileSystemSkillRegistry(loader, yamlReader, new SkillSummaryFormatter(), "skills/**/meta.yaml", otherTemp.toString()))
       .isInstanceOf(IllegalStateException.class)
       .hasMessageContaining("Duplicate skill name");
   }

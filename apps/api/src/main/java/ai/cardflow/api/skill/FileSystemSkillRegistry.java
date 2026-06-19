@@ -1,6 +1,5 @@
 package ai.cardflow.api.skill;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -13,11 +12,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.io.UrlResource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.yaml.snakeyaml.Yaml;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 
@@ -40,10 +39,10 @@ public class FileSystemSkillRegistry implements SkillRegistry {
   @Autowired
   public FileSystemSkillRegistry(
     ResourceLoader loader,
-    @Qualifier("yamlObjectMapper") ObjectMapper yamlMapper,
+    Yaml yamlReader,
     SkillSummaryFormatter formatter
   ) {
-    this(loader, yamlMapper, formatter, "classpath:skills/**/meta.yaml", null);
+    this(loader, yamlReader, formatter, "classpath:skills/**/meta.yaml", null);
   }
 
   /**
@@ -51,13 +50,13 @@ public class FileSystemSkillRegistry implements SkillRegistry {
    */
   public FileSystemSkillRegistry(
     ResourceLoader loader,
-    ObjectMapper yamlMapper,
+    Yaml yamlReader,
     SkillSummaryFormatter formatter,
     String classpathPattern,
     String fileSystemRoot
   ) {
     this.formatter = formatter;
-    this.skills = loadFromClasspath(loader, yamlMapper, classpathPattern, fileSystemRoot);
+    this.skills = loadFromClasspath(loader, yamlReader, classpathPattern, fileSystemRoot);
   }
 
   @Override
@@ -90,7 +89,7 @@ public class FileSystemSkillRegistry implements SkillRegistry {
 
   private Map<String, SkillMeta> loadFromClasspath(
     ResourceLoader loader,
-    ObjectMapper yamlMapper,
+    Yaml yamlReader,
     String pattern,
     String fileSystemRoot
   ) {
@@ -98,7 +97,7 @@ public class FileSystemSkillRegistry implements SkillRegistry {
     List<SkillSource> sources = discoverMetaFiles(loader, fileSystemRoot, pattern);
     sources.sort((a, b) -> a.dirName().compareTo(b.dirName()));
     for (SkillSource source : sources) {
-      SkillMeta meta = parseMeta(yamlMapper, source.resource());
+      SkillMeta meta = parseMeta(yamlReader, source.resource());
       if (map.containsKey(meta.name())) {
         throw new IllegalStateException("Duplicate skill name: " + meta.name());
       }
@@ -166,10 +165,10 @@ public class FileSystemSkillRegistry implements SkillRegistry {
     }
   }
 
-  private SkillMeta parseMeta(ObjectMapper yamlMapper, Resource metaResource) {
+  private SkillMeta parseMeta(Yaml yamlReader, Resource metaResource) {
     try (InputStream in = metaResource.getInputStream()) {
       @SuppressWarnings("unchecked")
-      Map<String, Object> raw = yamlMapper.readValue(in, Map.class);
+      Map<String, Object> raw = yamlReader.load(in);
       String name = (String) raw.get("name");
       String description = (String) raw.get("description");
       String whenToApply = (String) raw.get("whenToApply");
