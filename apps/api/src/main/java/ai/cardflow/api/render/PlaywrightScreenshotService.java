@@ -5,6 +5,7 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.options.ScreenshotScale;
 import java.nio.file.Path;
 import org.springframework.stereotype.Service;
 
@@ -25,13 +26,16 @@ public class PlaywrightScreenshotService {
   public void screenshot(String html, Canvas canvas, Path outputFile) {
     try (Playwright playwright = Playwright.create();
          Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true))) {
-      Page page = browser.newPage();
-      page.setViewportSize(canvas.width(), canvas.height());
+      Page page = browser.newPage(new Browser.NewPageOptions()
+        .setViewportSize(canvas.width(), canvas.height())
+        .setDeviceScaleFactor(canvas.pixelRatio())
+      );
       // setContent 直接加载内联 HTML，避免额外写临时 HTML 文件。
       page.setContent(html);
       page.screenshot(new Page.ScreenshotOptions()
         .setPath(outputFile)
         .setFullPage(false)
+        .setScale(ScreenshotScale.DEVICE)
       );
     }
   }

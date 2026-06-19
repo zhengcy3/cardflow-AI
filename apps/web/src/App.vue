@@ -7,7 +7,6 @@ import {
   getUsageSummary,
   listProjects,
   renderProject,
-  updateProjectContent,
   type GenerationMode,
   type OutputFormat,
   type ProjectResponse,
@@ -36,9 +35,10 @@ const contentJson = ref("");
 const currentProject = ref<ProjectResponse | null>(null);
 const projects = ref<ProjectResponse[]>([]);
 const isGenerating = ref(false);
+const isPreviewModalOpen = ref(false);
+const activePreviewUrl = ref<string | null>(null);
 const statusMessage = ref("准备生成");
 const usageSummary = ref({ dailyQuota: 10, usedToday: 0, remainingToday: 10 });
-const isSavingContent = ref(false);
 
 const parsedContent = computed(() => {
   if (!contentJson.value) return null;
@@ -60,6 +60,23 @@ const previewRatioClass = computed(() => ({
   "mock-card-wide": outputFormat.value === "youtube_16_9" || outputFormat.value === "bilibili_16_9",
   "mock-card-vertical": outputFormat.value === "douyin_9_16"
 }));
+const currentPreviewUrl = computed(() => currentProject.value?.coverUrl ?? null);
+
+function openPreview(url?: string | null) {
+  if (!url) return;
+  activePreviewUrl.value = url;
+  isPreviewModalOpen.value = true;
+}
+
+function closePreview() {
+  isPreviewModalOpen.value = false;
+  activePreviewUrl.value = null;
+}
+
+function openProjectPreview(project: ProjectResponse) {
+  currentProject.value = project;
+  openPreview(project.coverUrl);
+}
 
 async function runGeneration() {
   if (renderMode.value !== "precise_card") {
@@ -119,40 +136,19 @@ async function removeProject(projectId: string) {
   projects.value = await listProjects();
   if (currentProject.value?.id === projectId) {
     currentProject.value = null;
+    closePreview();
   }
 }
 
-async function saveContentAndRender() {
-  if (!currentProject.value) {
-    statusMessage.value = "请先生成一个作品";
-    return;
-  }
-
-  try {
-    JSON.parse(contentJson.value);
-  } catch {
-    statusMessage.value = "JSON 格式不正确，请检查后再保存";
-    return;
-  }
-
-  isSavingContent.value = true;
-  statusMessage.value = "保存编辑内容";
-  try {
-    currentProject.value = await updateProjectContent(currentProject.value.id, contentJson.value);
-    statusMessage.value = "重新渲染图片";
-    await renderProject(currentProject.value.id);
-    projects.value = await listProjects();
-    currentProject.value = projects.value.find((project) => project.id === currentProject.value?.id) ?? currentProject.value;
-    statusMessage.value = "编辑已保存";
-  } catch (error) {
-    statusMessage.value = error instanceof Error ? error.message : "保存失败";
-  } finally {
-    isSavingContent.value = false;
-  }
-}
 </script>
 
 <template>
+  <div class="ambient-motion" aria-hidden="true">
+    <i class="ambient-light ambient-light-violet" />
+    <i class="ambient-light ambient-light-rose" />
+    <i class="ambient-light ambient-light-cyan" />
+  </div>
+
   <main class="page">
     <nav class="topbar" aria-label="主导航">
       <div class="brand">
@@ -178,7 +174,6 @@ async function saveContentAndRender() {
         <h1>打造<span>高转化</span>知识卡片</h1>
         <p class="subline">输入主题或文章，30 秒生成适合小红书发布的知识卡片。</p>
       </header>
-        <div class="helper">当前状态：{{ statusMessage }}</div>
     </section>
 
     <section class="workspace">
@@ -192,7 +187,7 @@ async function saveContentAndRender() {
           <div class="field-grid">
             <div class="segmented" aria-label="生成方式">
               <button class="segment" :class="{ active: generationMode === 'topic' }" type="button" @click="generationMode = 'topic'">主题生成</button>
-              <button class="segment" :class="{ active: generationMode === 'article' }" type="button" @click="generationMode = 'article'">文章生成</button>
+              <button class="segment" type="button" disabled title="真实 AI 文章生成后续接入">文章生成</button>
             </div>
 
             <template v-if="generationMode === 'topic'">
@@ -266,41 +261,44 @@ async function saveContentAndRender() {
 
           <div class="formats">
             <button class="format-card" :class="{ active: outputFormat === 'xhs_3_4' }" type="button" @click="outputFormat = 'xhs_3_4'">
-              <span class="format-icon">3:4</span>
+              <span class="format-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M22.405 9.879c.538 4.757-1.374 9.064-4.577 12.186-3.834 3.738-9.066 5.378-13.882 3.913-1.638-.501-3.21-1.28-4.63-2.315.11-.08.22-.16.33-.24 3.123 2.148 6.945 2.753 10.518 1.638 3.864-1.18 6.772-4.148 7.747-8.081.706-2.836.425-5.696-.757-8.318.599.362 1.155.77 1.664 1.222 1.353 1.206 2.213 2.809 2.587 4.615zM12.016 0c4.135.035 8.164 1.768 11.096 4.708 2.934 2.943 4.673 6.974 4.708 11.11-.035 4.136-1.774 8.167-4.708 11.11-2.932 2.94-6.961 4.673-11.096 4.708-4.135-.035-8.164-1.768-11.096-4.708C1.774 23.985.035 19.954 0 15.818.035 11.682 1.774 7.651 4.708 4.708 7.64 1.768 11.669.035 15.804 0h.212z"/>
+                </svg>
+              </span>
               <span class="format-title">小红书</span>
               <span class="format-ratio">单页 / 轮播</span>
             </button>
             <button class="format-card" :class="{ active: outputFormat === 'youtube_16_9' }" type="button" @click="outputFormat = 'youtube_16_9'">
-              <span class="format-icon">16:9</span>
+              <span class="format-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M21.543 6.498C22 8.21 22 12 22 12s0 3.79-.457 5.502a2.502 2.502 0 0 1-1.76 1.76C18.07 19.722 12 19.722 12 19.722s-6.07 0-7.783-.46a2.502 2.502 0 0 1-1.76-1.76C2 15.79 2 12 2 12s0-3.79.457-5.502a2.502 2.502 0 0 1 1.76-1.76C5.93 4.278 12 4.278 12 4.278s6.07 0 7.783.46a2.502 2.502 0 0 1 1.76 1.76zM9.75 8.75v6.5L15.5 12l-5.75-3.25z"/>
+                </svg>
+              </span>
               <span class="format-title">YouTube</span>
               <span class="format-ratio">横版封面</span>
             </button>
             <button class="format-card" :class="{ active: outputFormat === 'bilibili_16_9' }" type="button" @click="outputFormat = 'bilibili_16_9'">
-              <span class="format-icon">16:9</span>
+              <span class="format-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.5 5.5h-2.17l1.7-1.7a.75.75 0 1 0-1.06-1.06L14.38 5.33A.75.75 0 0 0 14.5 5.5H9.5a.75.75 0 0 0 .12-.17L7.03 2.74a.75.75 0 1 0-1.06 1.06l1.7 1.7H5.5A3.5 3.5 0 0 0 2 9v8a3.5 3.5 0 0 0 3.5 3.5h13A3.5 3.5 0 0 0 22 17V9a3.5 3.5 0 0 0-3.5-3.5zm2 11.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2v8zM7.5 10.5h2v2h-2zm7 0h2v2h-2z"/>
+                </svg>
+              </span>
               <span class="format-title">B站封面</span>
               <span class="format-ratio">横版视频</span>
             </button>
             <button class="format-card" :class="{ active: outputFormat === 'douyin_9_16' }" type="button" @click="outputFormat = 'douyin_9_16'">
-              <span class="format-icon">9:16</span>
+              <span class="format-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.497 7.915a5.538 5.538 0 0 1-3.412-1.161V14.5a6.5 6.5 0 1 1-6.5-6.5c.348 0 .684.032 1.012.088V12.18A4.478 4.478 0 1 0 14 14.5V2.5h3.987a5.526 5.526 0 0 0 1.51 5.415z"/>
+                </svg>
+              </span>
               <span class="format-title">抖音封面</span>
               <span class="format-ratio">竖屏视频</span>
             </button>
           </div>
         </section>
 
-        <section v-if="contentJson" class="panel pad">
-          <div class="panel-title">
-            <b>内容编辑</b>
-            <span>CONTENT JSON</span>
-          </div>
-          <textarea v-model="contentJson" class="prompt-area content-json-editor" spellcheck="false" />
-          <div class="editor-actions">
-            <button class="secondary-button" type="button" :disabled="isSavingContent" @click="contentJson = currentProject?.contentJson ?? contentJson">恢复</button>
-            <button class="primary-button" type="button" :disabled="isSavingContent" @click="saveContentAndRender">
-              {{ isSavingContent ? "保存中..." : "保存并重新渲染" }}
-            </button>
-          </div>
-        </section>
       </div>
 
       <aside class="right-stack">
@@ -310,7 +308,10 @@ async function saveContentAndRender() {
             <span>{{ outputFormat }}</span>
           </div>
           <div class="preview-stage">
-            <article class="mock-card" :class="previewRatioClass">
+            <button v-if="currentPreviewUrl" class="generated-preview" type="button" @click="openPreview(currentPreviewUrl)">
+              <img :src="currentPreviewUrl" :alt="`${currentProject?.title ?? '生成卡片'}预览图`" />
+            </button>
+            <article v-else class="mock-card" :class="previewRatioClass">
               <div class="mock-label">知识卡片 01</div>
               <h3>{{ previewTitle }}</h3>
               <p>{{ previewSummary }}</p>
@@ -322,16 +323,16 @@ async function saveContentAndRender() {
                 <span>{{ previewPageLabel }}</span>
               </div>
             </article>
-            <a v-if="currentProject?.coverUrl" class="preview-link" :href="currentProject.coverUrl" target="_blank">打开生成预览</a>
+            <button v-if="currentPreviewUrl" class="preview-link" type="button" @click="openPreview(currentPreviewUrl)">预览大图</button>
             <div v-if="currentProject?.pages.length" class="page-links">
-              <a
+              <button
                 v-for="page in currentProject.pages"
                 :key="page.id"
-                :href="page.imageUrl ?? '#'"
-                target="_blank"
+                type="button"
+                @click="openPreview(page.imageUrl)"
               >
                 第 {{ page.pageIndex + 1 }} 页
-              </a>
+              </button>
             </div>
           </div>
         </section>
@@ -343,11 +344,11 @@ async function saveContentAndRender() {
           </div>
           <div class="works">
             <div v-for="project in projects.slice(0, 4)" :key="project.id" class="work-item">
-              <a :href="project.coverUrl ?? '#'" target="_blank">
+              <button class="work-preview-button" type="button" @click="openProjectPreview(project)">
                 <span>{{ project.title }}</span>
                 <small>{{ project.status }}</small>
-              </a>
-              <button type="button" @click="removeProject(project.id)">删除</button>
+              </button>
+              <button class="delete-button" type="button" @click="removeProject(project.id)">删除</button>
             </div>
             <div v-if="projects.length === 0" class="empty-state">暂无作品，先生成一张卡片。</div>
           </div>
@@ -364,5 +365,17 @@ async function saveContentAndRender() {
     <button class="generate-button" type="button" :disabled="isGenerating" @click="runGeneration">
       {{ isGenerating ? "生成中..." : "生成卡片 →" }}
     </button>
+  </div>
+
+  <div v-if="isPreviewModalOpen && activePreviewUrl" class="preview-modal" role="dialog" aria-modal="true" aria-label="生成图片预览" @click.self="closePreview">
+    <div class="preview-modal-panel">
+      <div class="preview-modal-header">
+        <span>{{ currentProject?.title ?? "生成图片预览" }}</span>
+        <button type="button" @click="closePreview">关闭</button>
+      </div>
+      <div class="preview-modal-stage">
+        <img :src="activePreviewUrl" alt="生成图片预览" />
+      </div>
+    </div>
   </div>
 </template>

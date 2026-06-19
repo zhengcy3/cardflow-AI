@@ -37,9 +37,9 @@ public class HtmlTemplateRenderer {
    */
   public Canvas canvas(String ratio) {
     return switch (ratio) {
-      case "youtube_16_9", "bilibili_16_9" -> new Canvas(1280, 720);
-      case "douyin_9_16" -> new Canvas(900, 1600);
-      default -> new Canvas(900, 1200);
+      case "youtube_16_9", "bilibili_16_9" -> new Canvas(1280, 720, 2);
+      case "douyin_9_16" -> new Canvas(900, 1600, 2);
+      default -> new Canvas(900, 1200, 2);
     };
   }
 
@@ -61,6 +61,11 @@ public class HtmlTemplateRenderer {
    * @return 完整 HTML 字符串
    */
   public String render(ProjectResponse project, RenderPage page) {
+    String dynamicHtml = dynamicHtml(page);
+    if (dynamicHtml != null) {
+      return dynamicHtml;
+    }
+
     Canvas canvas = canvas(project.ratio());
     RenderCard card = page.card();
     String platform = platformLabel(project.ratio());
@@ -222,6 +227,16 @@ public class HtmlTemplateRenderer {
   public List<RenderPage> pages(ProjectResponse project) {
     try {
       JsonNode root = objectMapper.readTree(project.contentJson());
+      if ("html_card".equals(root.path("kind").asText()) && !root.path("html").asText("").isBlank()) {
+        RenderCard card = new RenderCard(
+          root.path("title").asText(project.title()),
+          root.path("designNotes").asText("AI 动态生成 HTML 卡片"),
+          List.of("动态 HTML", "实时版式", "Playwright 截图"),
+          "01 / 01"
+        );
+        return List.of(new RenderPage(0, "dynamic_html", root.toString(), card));
+      }
+
       if (root.has("pages") && root.get("pages").isArray() && root.get("pages").size() > 0) {
         List<RenderPage> pages = new ArrayList<>();
         int pageCount = root.get("pages").size();
@@ -260,6 +275,47 @@ public class HtmlTemplateRenderer {
         "01 / 01"
       );
       return List.of(new RenderPage(0, "fallback", project.contentJson(), fallback));
+    }
+  }
+
+  /**
+   * 从动态 HTML 页面中提取完整 HTML。
+   *
+   * @param page 渲染页面
+   * @return 安全 HTML，非动态页面返回 null
+   */
+  private String dynamicHtml(RenderPage page) {
+    try {
+      JsonNode root = objectMapper.readTree(page.contentJson());
+      if (!"html_card".equals(root.path("kind").asText())) {
+        return null;
+      }
+      String html = root.path("html").asText("");
+      if (html.isBlank()) {
+        return null;
+      }
+      assertSafeDynamicHtml(html);
+      return html;
+    } catch (IOException e) {
+      return null;
+    }
+  }
+
+  /**
+   * 动态 HTML 渲染前的基础安全校验。
+   *
+   * @param html AI 返回 HTML
+   */
+  private void assertSafeDynamicHtml(String html) {
+    String lower = html.toLowerCase();
+    if (lower.contains("<script") || lower.contains("</script")) {
+      throw new IllegalStateException("Dynamic HTML cannot contain script.");
+    }
+    if (lower.contains("http://") || lower.contains("https://") || lower.contains("src=") || lower.contains("href=")) {
+      throw new IllegalStateException("Dynamic HTML cannot contain external resources.");
+    }
+    if (lower.contains("@import") || lower.contains("url(")) {
+      throw new IllegalStateException("Dynamic HTML cannot contain external style resources.");
     }
   }
 

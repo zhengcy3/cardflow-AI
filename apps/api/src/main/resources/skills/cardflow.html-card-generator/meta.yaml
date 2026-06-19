@@ -1,0 +1,7 @@
+name: cardflow.html-card-generator
+description: 生成符合 CardFlow html_card 协议的动态信息卡(小红书/抖音/B站/YouTube)
+whenToApply: 用户调用内容生成接口、generationMode=topic 时
+tags:
+  - topic
+  - html_card
+version: 1

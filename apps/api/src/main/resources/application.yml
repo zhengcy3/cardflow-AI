@@ -5,9 +5,23 @@ spring:
   datasource:
     url: jdbc:sqlite:data/cardflow.db
     driver-class-name: org.sqlite.JDBC
+  ai:
+    openai:
+      base-url: https://api.deepseek.com/v1
+      api-key: ${DEEPSEEK_API_KEY}
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.85
 
 cardflow:
   storage:
     output-dir: storage/outputs
   app:
     default-user-id: local-user
+  llm:
+    provider: deepseek
+    base-url: https://api.deepseek.com
+    model: deepseek-v4-flash
+    api-key: sk-35d6529874d6471090cfef9998ba07ee
+    max-tokens: 5000

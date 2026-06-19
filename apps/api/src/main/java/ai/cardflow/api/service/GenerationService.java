@@ -1,63 +1,56 @@
 package ai.cardflow.api.service;
 
 import ai.cardflow.api.config.AppProperties;
-import ai.cardflow.api.llm.LlmProvider;
 import ai.cardflow.api.model.ApiModels.GenerateContentRequest;
 import ai.cardflow.api.model.ApiModels.GenerateContentResponse;
 import ai.cardflow.api.model.ApiModels.TopicInput;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
  * 内容生成服务。
  *
- * <p>负责记录生成任务、调用 {@link LlmProvider}、写入用量记录，并把结构化 JSON 返回给前端。</p>
+ * <p>负责记录生成任务、调用 Spring AI {@link ChatClient}、
+ * 写入用量记录,并把结构化 JSON 返回给前端。</p>
  */
 @Service
 public class GenerationService {
+  private final String modelName;
+
   private final JdbcTemplate jdbc;
   private final AppProperties properties;
+  private final ChatClient chatClient;
+  private final HtmlCardValidator validator;
   private final ObjectMapper objectMapper;
-  private final LlmProvider llmProvider;
 
-  /**
-   * 注入生成链路依赖。
-   *
-   * @param jdbc SQLite 访问入口
-   * @param properties 应用配置
-   * @param objectMapper JSON 序列化工具
-   * @param llmProvider 当前启用的 LLM Provider
-   */
   public GenerationService(
     JdbcTemplate jdbc,
     AppProperties properties,
+    ChatClient chatClient,
+    HtmlCardValidator validator,
     ObjectMapper objectMapper,
-    LlmProvider llmProvider
+    @Value("${spring.ai.openai.chat.options.model:deepseek-chat}") String modelName
   ) {
     this.jdbc = jdbc;
     this.properties = properties;
+    this.chatClient = chatClient;
+    this.validator = validator;
     this.objectMapper = objectMapper;
-    this.llmProvider = llmProvider;
+    this.modelName = modelName;
   }
 
-  /**
-   * 执行一次内容生成。
-   *
-   * <p>方法会先创建 running 状态任务；Provider 成功后写入用量记录，失败时把任务标记为 failed。</p>
-   *
-   * @param request 内容生成请求
-   * @return 生成任务 ID 和结构化内容 JSON
-   */
   public GenerateContentResponse generate(GenerateContentRequest request) {
     String taskId = UUID.randomUUID().toString();
     String now = Instant.now().toString();
     String inputText = inputText(request);
-    // 记录影响生成结果的关键参数，便于后续排查同一输入在不同模板或比例下的表现。
     String paramsJson = toJson(Map.of(
       "generationMode", request.generationMode(),
       "outputFormat", request.outputFormat(),
@@ -66,62 +59,100 @@ public class GenerationService {
     ));
 
     jdbc.update("""
-      insert into generate_task
-      (id, user_id, project_id, task_type, input_text, input_params_json, status, error_message, started_at, finished_at, created_at)
-      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
-      taskId,
-      properties.app().defaultUserId(),
-      null,
-      "content_generation",
-      inputText,
-      paramsJson,
-      "running",
-      null,
-      now,
-      null,
-      now
+        insert into generate_task
+        (id, user_id, project_id, task_type, input_text, input_params_json, status, error_message, started_at, finished_at, created_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        taskId,
+        properties.app().defaultUserId(),
+        null,
+        "content_generation",
+        inputText,
+        paramsJson,
+        "running",
+        null,
+        now,
+        null,
+        now
     );
 
     try {
-      String contentJson = llmProvider.generateContent(request);
+      String contentJson = chatClient.prompt()
+        .system(buildSystemPrompt())
+        .user(buildUserPrompt(request))
+        .call()
+        .content();
+      validator.validate(objectMapper.readTree(contentJson));
       String finishedAt = Instant.now().toString();
-      // 内容生成当前是同步完成，但仍保留任务表，方便后续替换为异步真实 LLM。
       jdbc.update("update generate_task set status = ?, finished_at = ? where id = ?", "succeeded", finishedAt, taskId);
       jdbc.update("""
-        insert into usage_record (id, user_id, task_id, usage_type, amount, model_name, created_at)
-        values (?, ?, ?, ?, ?, ?, ?)
-        """,
-        UUID.randomUUID().toString(),
-        properties.app().defaultUserId(),
-        taskId,
-        "content_generation",
-        1,
-        llmProvider.name(),
-        finishedAt
+          insert into usage_record (id, user_id, task_id, usage_type, amount, model_name, created_at)
+          values (?, ?, ?, ?, ?, ?, ?)
+          """,
+          UUID.randomUUID().toString(),
+          properties.app().defaultUserId(),
+          taskId,
+          "content_generation",
+          1,
+          modelName,
+          finishedAt
       );
-
       return new GenerateContentResponse(taskId, contentJson);
-    } catch (RuntimeException e) {
+    } catch (Exception e) {
       String finishedAt = Instant.now().toString();
-      // 保留 Provider 抛出的错误信息，前端可以通过任务状态接口展示失败原因。
+      String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
       jdbc.update(
         "update generate_task set status = ?, error_message = ?, finished_at = ? where id = ?",
-        "failed",
-        e.getMessage(),
-        finishedAt,
-        taskId
+        "failed", message, finishedAt, taskId
       );
-      throw e;
+      throw new IllegalStateException(message, e);
     }
   }
 
-  /**
-   * 提取用于任务追踪的原始输入文本。
-   *
-   * @param request 内容生成请求
-   * @return 主题字段拼接结果或文章正文
-   */
+  private String buildSystemPrompt() {
+    return """
+        你是 CardFlow AI 的信息卡片 HTML 设计师。
+        必须输出严格 JSON,不要输出 Markdown,不要输出解释。
+        """;
+  }
+
+  private String buildUserPrompt(GenerateContentRequest request) {
+    if ("article".equals(request.generationMode())) {
+      return "请根据下面文章生成 CardFlow html_card JSON：\n" + safe(request.articleInput() == null ? "" : request.articleInput().body());
+    }
+    return buildTopicPrompt(request);
+  }
+
+  private String buildTopicPrompt(GenerateContentRequest request) {
+    TopicInput topic = request.topicInput();
+    OutputSpec output = outputSpec(request.outputFormat());
+    return """
+        请根据下面主题生成一张动态 HTML 信息卡片 json：
+        平台规格：%s
+        画布宽高：%dpx × %dpx
+        内容策略：%s
+        主题标题：%s
+        副标题或上下文：%s
+        补充说明：%s
+        """.formatted(
+        output.label(), output.width(), output.height(), output.strategy(),
+        safe(topic == null ? "" : topic.title()),
+        safe(topic == null ? "" : topic.subtitle()),
+        safe(topic == null ? "" : topic.instructions())
+    );
+  }
+
+  private OutputSpec outputSpec(String outputFormat) {
+    return switch (safe(outputFormat)) {
+      case "youtube_16_9" -> new OutputSpec("YouTube 封面 16:9", 1280, 720, "优先强标题、强对比、少文字，适合作为视频封面。");
+      case "bilibili_16_9" -> new OutputSpec("B站封面 16:9", 1280, 720, "优先强标题、视觉冲突和二次元/知识区封面可读性。");
+      case "douyin_9_16" -> new OutputSpec("抖音竖屏封面 9:16", 900, 1600, "优先竖屏视觉冲击，标题靠中上，避免底部交互区。");
+      default -> new OutputSpec("小红书知识卡片 3:4", 900, 1200, "优先知识卡片结构，可使用清单、对比、流程、概念图等信息版式。");
+    };
+  }
+
+  private record OutputSpec(String label, int width, int height, String strategy) {}
+
   private String inputText(GenerateContentRequest request) {
     if ("article".equals(request.generationMode()) && request.articleInput() != null) {
       return safe(request.articleInput().body());
@@ -130,12 +161,6 @@ public class GenerationService {
     return topic == null ? "" : safe(topic.title()) + "\n" + safe(topic.subtitle()) + "\n" + safe(topic.instructions());
   }
 
-  /**
-   * 将任务参数序列化为 JSON。
-   *
-   * @param value 任意可序列化对象
-   * @return JSON 字符串
-   */
   private String toJson(Object value) {
     try {
       return objectMapper.writeValueAsString(value);
@@ -144,12 +169,6 @@ public class GenerationService {
     }
   }
 
-  /**
-   * 将 null 字符串归一为空字符串。
-   *
-   * @param value 原始字符串
-   * @return 非 null 字符串
-   */
   private String safe(String value) {
     return value == null ? "" : value;
   }
