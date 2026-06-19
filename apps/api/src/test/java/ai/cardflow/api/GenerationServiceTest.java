@@ -32,8 +32,7 @@ class GenerationServiceTest {
   void setUp() {
     AppProperties properties = new AppProperties(
       new AppProperties.Storage("storage/outputs"),
-      new AppProperties.App("local-user"),
-      new AppProperties.Llm("deepseek", "https://api.deepseek.com", "deepseek-chat", "test-key", 5000)
+      new AppProperties.App("local-user")
     );
     DriverManagerDataSource dataSource = new DriverManagerDataSource("jdbc:sqlite:" + tempDir.resolve("cardflow-test.db"));
     dataSource.setDriverClassName("org.sqlite.JDBC");
