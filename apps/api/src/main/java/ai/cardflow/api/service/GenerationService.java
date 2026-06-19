@@ -127,6 +127,10 @@ public class GenerationService {
         - html 必须是完整 HTML 文档(包含 <html> 和 </html>)
         - html 中禁止 <script>、外链(http/https)、外链资源(src/href)、@import、url(...)
 
+        ## 字符串引号规则（避免 JSON 解析失败）
+        - 所有字段值里的引号必须用中文「」或『』,严禁使用英文双引号 "
+        - 如需强调术语,请用中文引号：采用 balanced 布局,结合「清单陷阱」结构
+
         ## 行为要求
         - 必须输出严格 JSON,不要输出 Markdown 包裹
         - 详细的视觉/布局/质量规则可通过 read_skill 工具读取完整 SKILL.md
