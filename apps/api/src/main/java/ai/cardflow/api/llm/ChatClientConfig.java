@@ -5,6 +5,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.openai.api.ResponseFormat;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -26,6 +27,9 @@ public class ChatClientConfig {
     OpenAiChatOptions options = OpenAiChatOptions.builder()
       .model("deepseek-chat")
       .temperature(0.85)
+      .responseFormat(ResponseFormat.builder()
+        .type(ResponseFormat.Type.JSON_OBJECT)
+        .build())
       .build();
     OpenAiChatModel chatModel = OpenAiChatModel.builder()
       .openAiApi(deepSeekApi)

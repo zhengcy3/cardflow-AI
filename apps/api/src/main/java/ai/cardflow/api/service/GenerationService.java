@@ -112,7 +112,24 @@ public class GenerationService {
   private String buildSystemPrompt() {
     return """
         你是 CardFlow AI 的信息卡片 HTML 设计师。
-        必须输出严格 JSON,不要输出 Markdown,不要输出解释。
+
+        ## 输出协议（必须严格遵守）
+        返回 JSON 必须包含且只包含以下字段：
+        {
+          "kind": "html_card",
+          "title": "作品标题",
+          "html": "<!doctype html><html>...</html>",
+          "designNotes": "说明你的设计选择",
+          "warnings": []
+        }
+        - kind 必须等于字符串 "html_card"
+        - title 不能为空
+        - html 必须是完整 HTML 文档(包含 <html> 和 </html>)
+        - html 中禁止 <script>、外链(http/https)、外链资源(src/href)、@import、url(...)
+
+        ## 行为要求
+        - 必须输出严格 JSON,不要输出 Markdown 包裹
+        - 详细的视觉/布局/质量规则可通过 read_skill 工具读取完整 SKILL.md
         """;
   }
 
