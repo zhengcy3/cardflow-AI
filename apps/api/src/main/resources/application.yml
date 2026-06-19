@@ -7,7 +7,7 @@ spring:
     driver-class-name: org.sqlite.JDBC
   ai:
     openai:
-      base-url: https://api.deepseek.com/v1
+      base-url: https://api.deepseek.com
       api-key: sk-35d6529874d6471090cfef9998ba07ee
       chat:
         options:
