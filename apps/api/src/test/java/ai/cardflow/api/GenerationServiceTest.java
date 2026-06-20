@@ -11,6 +11,7 @@ import ai.cardflow.api.model.ApiModels.GenerateContentRequest;
 import ai.cardflow.api.model.ApiModels.TopicInput;
 import ai.cardflow.api.service.GenerationService;
 import ai.cardflow.api.service.HtmlCardValidator;
+import ai.cardflow.api.skill.SkillRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +20,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class GenerationServiceTest {
   @TempDir
@@ -50,8 +50,15 @@ class GenerationServiceTest {
     when(requestSpec.call()).thenReturn(responseSpec);
     when(responseSpec.content()).thenReturn(validJson);
 
-    generationService = new GenerationService(jdbc, properties, chatClient, new HtmlCardValidator(), new ObjectMapper(), "deepseek-chat");
-    ReflectionTestUtils.setField(generationService, "modelName", "deepseek-chat");
+    SkillRegistry skillRegistry = mock(SkillRegistry.class);
+    when(skillRegistry.readFullContent("cardflow.html-card-generator")).thenReturn("""
+        # CardFlow html_card 生成协议
+        返回 JSON：kind/title/html/designNotes/warnings
+        """);
+
+    generationService = new GenerationService(
+      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
+    );
   }
 
   @Test
@@ -68,7 +75,7 @@ class GenerationServiceTest {
     assertThat(response.taskId()).isNotBlank();
     assertThat(response.contentJson()).contains("\"kind\":\"html_card\"");
     Integer taskCount = jdbc.queryForObject("select count(*) from generate_task where task_type = 'content_generation'", Integer.class);
-    Integer usageCount = jdbc.queryForObject("select count(*) from usage_record where model_name = 'deepseek-chat'", Integer.class);
+    Integer usageCount = jdbc.queryForObject("select count(*) from usage_record where model_name = 'deepseek-v4-flash'", Integer.class);
     assertThat(taskCount).isEqualTo(1);
     assertThat(usageCount).isEqualTo(1);
   }

@@ -55,6 +55,58 @@ export interface UsageSummaryResponse {
   remainingToday: number;
 }
 
+export interface TemplateResponse {
+  id: string;
+  name: string;
+  description: string;
+  styleKey: string;
+  supportedTypes: string;
+  supportedRatios: string;
+}
+
+interface ApiErrorBody {
+  message?: string;
+}
+
+const DEFAULT_ERROR_MESSAGE = "操作失败，请稍后重试。";
+
+async function readApiError(response: Response): Promise<string> {
+  const text = (await response.text()).trim();
+  if (!text) {
+    return DEFAULT_ERROR_MESSAGE;
+  }
+
+  try {
+    const body = JSON.parse(text) as ApiErrorBody;
+    if (body.message?.trim()) {
+      return sanitizeClientMessage(body.message.trim());
+    }
+  } catch {
+    // 非 JSON 响应
+  }
+
+  if (text.startsWith("{") || text.startsWith("[") || text.includes("\"error\"")) {
+    return DEFAULT_ERROR_MESSAGE;
+  }
+
+  if (text.includes("\n\tat ") || text.includes("Caused by:")) {
+    return DEFAULT_ERROR_MESSAGE;
+  }
+
+  return sanitizeClientMessage(text.length > 160 ? DEFAULT_ERROR_MESSAGE : text);
+}
+
+function sanitizeClientMessage(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("authentication") || lower.includes("api key") || lower.includes("401")) {
+    return "AI 服务认证失败，请检查 DEEPSEEK_API_KEY 是否配置正确。";
+  }
+  if (message.startsWith("{") || message.startsWith("[") || message.includes("\"error\"")) {
+    return DEFAULT_ERROR_MESSAGE;
+  }
+  return message;
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -65,7 +117,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new Error(await readApiError(response));
   }
 
   return response.json() as Promise<T>;
@@ -109,6 +161,10 @@ export async function listProjects() {
   return request<ProjectResponse[]>("/api/projects");
 }
 
+export async function listTemplates() {
+  return request<TemplateResponse[]>("/api/templates");
+}
+
 export async function getUsageSummary() {
   return request<UsageSummaryResponse>("/api/usage/summary");
 }
@@ -119,6 +175,6 @@ export async function deleteProject(projectId: string) {
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new Error(await readApiError(response));
   }
 }

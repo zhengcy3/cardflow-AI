@@ -1,5 +1,10 @@
 server:
-  port: 8080
+  port: 8090
+
+logging:
+  level:
+    ai.cardflow.api.llm: INFO
+    ai.cardflow.api.service.GenerationService: INFO
 
 spring:
   datasource:
@@ -8,11 +13,12 @@ spring:
   ai:
     openai:
       base-url: https://api.deepseek.com
-      api-key: sk-35d6529874d6471090cfef9998ba07ee
+      api-key: sk-c6f5313d5c5e4c15b65a18231c0ee296
       chat:
         options:
-          model: deepseek-chat
+          model: deepseek-v4-flash
           temperature: 0.85
+          max-tokens: 2048
 
 cardflow:
   storage:

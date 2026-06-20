@@ -49,8 +49,10 @@ JSON 外层协议必须完全匹配：
 - 必须是完整 HTML 文档，包含 <!doctype html>、html、head、style、body。
 - 只允许内联 HTML + CSS，不允许 JavaScript。
 - 不允许 script、外链图片、外链字体、href、src、@import、url(...)。
-- 画布尺寸以用户提示中的平台规格为准，body margin 为 0，主容器宽高必须匹配该规格。
-- 所有内容必须在画布内，底部保留约 10%% 安全区，不要把关键信息放在最底部。
+- 画布尺寸以用户提示中的平台规格为准，body margin 为 0，主容器宽高必须精确等于画布像素（如 900px × 1200px），不要用 100vh、100vw。
+- 主容器使用 overflow: hidden，所有可见内容（含圆角、描边、背景）必须完全落在画布内。
+- 禁止使用会向外扩散的 box-shadow 或 filter: drop-shadow；装饰阴影请用 inset box-shadow 或 border。
+- 四边至少保留 32px 内边距，底部安全区建议 48px，页脚/署名不要贴边。
 - 中文字体使用系统字体栈：-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif。
 
 ## 质量约束

@@ -2,6 +2,8 @@ package ai.cardflow.api.exception;
 
 import java.time.Instant;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
+  private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
   /**
    * 查询不到资源时返回 404。
    *
@@ -23,7 +27,7 @@ public class ApiExceptionHandler {
    */
   @ExceptionHandler(EmptyResultDataAccessException.class)
   public ResponseEntity<Map<String, Object>> notFound() {
-    return error(HttpStatus.NOT_FOUND, "Resource not found");
+    return error(HttpStatus.NOT_FOUND, "未找到对应资源");
   }
 
   /**
@@ -37,7 +41,7 @@ public class ApiExceptionHandler {
     String message = exception.getBindingResult().getFieldErrors().stream()
       .findFirst()
       .map(error -> error.getField() + " " + error.getDefaultMessage())
-      .orElse("Validation failed");
+      .orElse("请求参数校验失败");
     return error(HttpStatus.BAD_REQUEST, message);
   }
 
@@ -49,7 +53,19 @@ public class ApiExceptionHandler {
    */
   @ExceptionHandler(IllegalStateException.class)
   public ResponseEntity<Map<String, Object>> illegalState(IllegalStateException exception) {
-    return error(HttpStatus.BAD_REQUEST, exception.getMessage());
+    return error(HttpStatus.BAD_REQUEST, ApiErrorMessages.toUserMessage(exception));
+  }
+
+  /**
+   * 兜底异常处理，不向用户暴露堆栈。
+   *
+   * @param exception 未捕获异常
+   * @return 标准错误响应
+   */
+  @ExceptionHandler(Exception.class)
+  public ResponseEntity<Map<String, Object>> fallback(Exception exception) {
+    log.error("Unhandled API error", exception);
+    return error(HttpStatus.INTERNAL_SERVER_ERROR, ApiErrorMessages.toUserMessage(exception));
   }
 
   /**
@@ -64,7 +80,7 @@ public class ApiExceptionHandler {
       "timestamp", Instant.now().toString(),
       "status", status.value(),
       "error", status.getReasonPhrase(),
-      "message", message
+      "message", ApiErrorMessages.toUserMessage(message)
     ));
   }
 }

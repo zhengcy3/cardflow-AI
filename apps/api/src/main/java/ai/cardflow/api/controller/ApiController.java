@@ -18,6 +18,8 @@ import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +38,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api")
 public class ApiController {
+  private static final Logger log = LoggerFactory.getLogger(ApiController.class);
+
   private final JdbcTemplate jdbc;
   private final AppProperties properties;
   private final GenerationService generationService;
@@ -142,6 +146,8 @@ public class ApiController {
    */
   @PostMapping("/generations/content")
   public GenerateContentResponse generateContent(@Valid @RequestBody GenerateContentRequest request) {
+    String topic = request.topicInput() == null ? "-" : request.topicInput().title();
+    log.info("POST /api/generations/content mode={} outputFormat={} topic={}", request.generationMode(), request.outputFormat(), topic);
     return generationService.generate(request);
   }
 
@@ -243,7 +249,7 @@ public class ApiController {
     // 使用 UTC 日期前缀匹配 ISO 时间字符串，避免引入额外日期列。
     String todayPrefix = LocalDate.now(ZoneOffset.UTC).toString();
     Integer used = jdbc.queryForObject("""
-      select count(*) from usage_record
+      select coalesce(sum(amount), 0) from usage_record
       where user_id = ? and created_at like ?
       """, Integer.class, properties.app().defaultUserId(), todayPrefix + "%");
     int usedValue = used == null ? 0 : used;

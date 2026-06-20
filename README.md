@@ -43,12 +43,12 @@ export DEEPSEEK_API_KEY=你的 DeepSeek API Key
 npm run dev:api
 ```
 
-DeepSeek 输出长度默认配置为 `cardflow.llm.max-tokens: 5000`，用于支持动态 HTML/CSS 生成。
+DeepSeek 默认使用 `deepseek-v4-flash`（比 v4-pro 便宜约 3 倍），输出上限 `spring.ai.openai.chat.options.max-tokens: 2048`。每次生成会在日志中输出 API 轮次、token 用量和实际 responseModel。
 
 后端地址：
 
 ```text
-http://localhost:8080
+http://localhost:8090
 ```
 
 SQLite 数据库默认位置：
@@ -82,7 +82,7 @@ npm run dev:web
 前端地址：
 
 ```text
-http://localhost:5173
+http://localhost:5178
 ```
 
 ## 本地缓存问题

@@ -1,6 +1,7 @@
 package ai.cardflow.api.service;
 
 import ai.cardflow.api.config.AppProperties;
+import ai.cardflow.api.exception.ApiErrorMessages;
 import ai.cardflow.api.model.ApiModels.CardPageResponse;
 import ai.cardflow.api.model.ApiModels.CreateProjectRequest;
 import ai.cardflow.api.model.ApiModels.ProjectResponse;
@@ -183,10 +184,11 @@ public class ProjectService {
         );
       }
     } catch (IOException e) {
-      throw new IllegalStateException("Failed to create output directory", e);
+      throw new IllegalStateException(ApiErrorMessages.toUserMessage(e));
     } catch (RuntimeException e) {
-      markRenderFailed(taskId, id, project.contentJson(), now, e.getMessage());
-      throw new IllegalStateException("Failed to render PNG with Playwright: " + e.getMessage(), e);
+      String userMessage = ApiErrorMessages.toUserMessage(e);
+      markRenderFailed(taskId, id, project.contentJson(), now, userMessage);
+      throw new IllegalStateException(userMessage);
     }
 
     // 列表页使用第一页作为封面；无页面时保持为空，避免返回不存在的图片地址。

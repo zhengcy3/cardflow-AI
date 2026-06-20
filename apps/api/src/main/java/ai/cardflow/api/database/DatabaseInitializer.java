@@ -123,7 +123,7 @@ public class DatabaseInitializer implements ApplicationRunner {
       )
       """);
 
-    // usage_record 当前按调用次数计量，后续可扩展为 token 或图片张数。
+    // usage_record.amount 记录单次生成实际打到 DeepSeek 的 API 轮次（含 tool calling）。
     jdbc.execute("""
       create table if not exists usage_record (
         id text primary key,

@@ -12,3 +12,5 @@ data/*.db-*
 storage/outputs/*
 !storage/outputs/.gitkeep
 *.log
+.sdd-reports
+.superpowers

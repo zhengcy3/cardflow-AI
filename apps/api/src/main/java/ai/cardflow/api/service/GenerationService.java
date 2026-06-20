@@ -1,15 +1,21 @@
 package ai.cardflow.api.service;
 
 import ai.cardflow.api.config.AppProperties;
+import ai.cardflow.api.exception.ApiErrorMessages;
+import ai.cardflow.api.llm.LlmCallContext;
+import ai.cardflow.api.llm.LlmCallStats;
 import ai.cardflow.api.model.ApiModels.GenerateContentRequest;
 import ai.cardflow.api.model.ApiModels.GenerateContentResponse;
 import ai.cardflow.api.model.ApiModels.TopicInput;
+import ai.cardflow.api.skill.SkillRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -23,11 +29,16 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class GenerationService {
+  private static final Logger log = LoggerFactory.getLogger(GenerationService.class);
+  private static final String HTML_CARD_SKILL = "cardflow.html-card-generator";
+
   private final String modelName;
+  private final int maxTokens;
 
   private final JdbcTemplate jdbc;
   private final AppProperties properties;
   private final ChatClient chatClient;
+  private final SkillRegistry skillRegistry;
   private final HtmlCardValidator validator;
   private final ObjectMapper objectMapper;
 
@@ -35,16 +46,20 @@ public class GenerationService {
     JdbcTemplate jdbc,
     AppProperties properties,
     ChatClient chatClient,
+    SkillRegistry skillRegistry,
     HtmlCardValidator validator,
     ObjectMapper objectMapper,
-    @Value("${spring.ai.openai.chat.options.model:deepseek-chat}") String modelName
+    @Value("${spring.ai.openai.chat.options.model:deepseek-v4-flash}") String modelName,
+    @Value("${spring.ai.openai.chat.options.max-tokens:2048}") int maxTokens
   ) {
     this.jdbc = jdbc;
     this.properties = properties;
     this.chatClient = chatClient;
+    this.skillRegistry = skillRegistry;
     this.validator = validator;
     this.objectMapper = objectMapper;
     this.modelName = modelName;
+    this.maxTokens = maxTokens;
   }
 
   public GenerateContentResponse generate(GenerateContentRequest request) {
@@ -76,6 +91,16 @@ public class GenerationService {
         now
     );
 
+    LlmCallContext.begin(taskId);
+    log.info(
+      "Content generation started taskId={} model={} maxTokens={} mode={} outputFormat={}",
+      taskId,
+      modelName,
+      maxTokens,
+      request.generationMode(),
+      request.outputFormat()
+    );
+
     try {
       String contentJson = chatClient.prompt()
         .system(buildSystemPrompt())
@@ -85,55 +110,68 @@ public class GenerationService {
       validator.validate(objectMapper.readTree(contentJson));
       String finishedAt = Instant.now().toString();
       jdbc.update("update generate_task set status = ?, finished_at = ? where id = ?", "succeeded", finishedAt, taskId);
-      jdbc.update("""
-          insert into usage_record (id, user_id, task_id, usage_type, amount, model_name, created_at)
-          values (?, ?, ?, ?, ?, ?, ?)
-          """,
-          UUID.randomUUID().toString(),
-          properties.app().defaultUserId(),
-          taskId,
-          "content_generation",
-          1,
-          modelName,
-          finishedAt
-      );
+      recordUsage(taskId, finishedAt);
+      log.info("Content generation succeeded taskId={} {}", taskId, formatStats(LlmCallContext.snapshot()));
       return new GenerateContentResponse(taskId, contentJson);
     } catch (Exception e) {
       String finishedAt = Instant.now().toString();
-      String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+      String userMessage = ApiErrorMessages.toUserMessage(e);
       jdbc.update(
         "update generate_task set status = ?, error_message = ?, finished_at = ? where id = ?",
-        "failed", message, finishedAt, taskId
+        "failed", userMessage, finishedAt, taskId
       );
-      throw new IllegalStateException(message, e);
+      LlmCallStats stats = LlmCallContext.snapshot();
+      if (stats != null && stats.callCount() > 0) {
+        recordUsage(taskId, finishedAt);
+      }
+      log.warn("Content generation failed taskId={} {} error={}", taskId, formatStats(stats), e.toString(), e);
+      throw new IllegalStateException(userMessage);
+    } finally {
+      LlmCallContext.clear();
     }
   }
 
-  private String buildSystemPrompt() {
-    return """
-        你是 CardFlow AI 的信息卡片 HTML 设计师。
+  private void recordUsage(String taskId, String finishedAt) {
+    int apiCalls = resolveApiCalls(LlmCallContext.snapshot());
+    jdbc.update("""
+        insert into usage_record (id, user_id, task_id, usage_type, amount, model_name, created_at)
+        values (?, ?, ?, ?, ?, ?, ?)
+        """,
+        UUID.randomUUID().toString(),
+        properties.app().defaultUserId(),
+        taskId,
+        "content_generation",
+        apiCalls,
+        modelName,
+        finishedAt
+    );
+  }
 
-        ## 输出协议（必须严格遵守）
-        返回 JSON 必须包含且只包含以下字段：
-        {
-          "kind": "html_card",
-          "title": "作品标题",
-          "html": "<!doctype html><html>...</html>",
-          "designNotes": "说明你的设计选择",
-          "warnings": []
-        }
-        - kind 必须等于字符串 "html_card"
-        - title 不能为空
-        - html 必须是完整 HTML 文档(包含 <html> 和 </html>)
-        - html 中禁止 <script>、外链(http/https)、外链资源(src/href)、@import、url(...)
+  private static int resolveApiCalls(LlmCallStats stats) {
+    if (stats == null || stats.callCount() <= 0) {
+      return 1;
+    }
+    return stats.callCount();
+  }
+
+  private static String formatStats(LlmCallStats stats) {
+    if (stats == null) {
+      return "apiCalls=0 promptTokens=0 completionTokens=0";
+    }
+    return "apiCalls=%d promptTokens=%d completionTokens=%d totalTokens=%d".formatted(
+      stats.callCount(),
+      stats.promptTokens(),
+      stats.completionTokens(),
+      stats.totalTokens()
+    );
+  }
+
+  private String buildSystemPrompt() {
+    return skillRegistry.readFullContent(HTML_CARD_SKILL) + """
 
         ## 字符串引号规则（避免 JSON 解析失败）
         - 所有字段值里的引号必须用中文「」或『』,严禁使用英文双引号 "
         - 如需强调术语,请用中文引号：采用 balanced 布局,结合「清单陷阱」结构
-
-        ## 行为要求
-        - 必须输出严格 JSON,不要输出 Markdown 包裹
-        - 详细的视觉/布局/质量规则可通过 read_skill 工具读取完整 SKILL.md
         """;
   }
 

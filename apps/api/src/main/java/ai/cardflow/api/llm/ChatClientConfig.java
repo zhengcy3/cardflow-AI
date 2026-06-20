@@ -1,7 +1,7 @@
 package ai.cardflow.api.llm;
 
-import ai.cardflow.api.skill.SkillRegistry;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
@@ -21,12 +21,14 @@ public class ChatClientConfig {
   @Bean
   public ChatClient chatClient(
     OpenAiApi deepSeekApi,
-    SkillRegistry registry,
-    ReadSkillTool readSkillTool
+    @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.chat.options.model:deepseek-v4-flash}") String model,
+    @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.chat.options.temperature:0.85}") double temperature,
+    @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.chat.options.max-tokens:2048}") int maxTokens
   ) {
     OpenAiChatOptions options = OpenAiChatOptions.builder()
-      .model("deepseek-chat")
-      .temperature(0.85)
+      .model(model)
+      .temperature(temperature)
+      .maxTokens(maxTokens)
       .responseFormat(ResponseFormat.builder()
         .type(ResponseFormat.Type.JSON_OBJECT)
         .build())
@@ -35,10 +37,8 @@ public class ChatClientConfig {
       .openAiApi(deepSeekApi)
       .defaultOptions(options)
       .build();
-    return ChatClient.builder(chatModel)
-      .defaultAdvisors(new SkillRoutingAdvisor(registry))
-      .defaultToolCallbacks(readSkillTool)
-      .build();
+    ChatModel observingModel = new LoggingChatModel(chatModel, model);
+    return ChatClient.builder(observingModel).build();
   }
 
   @Bean
