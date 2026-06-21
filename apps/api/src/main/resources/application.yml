@@ -25,3 +25,10 @@ cardflow:
     output-dir: storage/outputs
   app:
     default-user-id: local-user
+  image:
+    provider: minimax
+    minimax:
+      base-url: https://api.minimaxi.com
+      api-key: sk-api-eZSw0ZLcp-5eMz5E5_PZ5Q6chd0lnVlD18DhiUB7KDUGwIyTGptb1lJ4BKNgbZp-0OeAeLhQ4oq34MCJGz3V3uhf9x3otQEBt6pbcLUqygRW5uyXPBBEbQo
+      model: image-01
+      prompt-optimizer: false

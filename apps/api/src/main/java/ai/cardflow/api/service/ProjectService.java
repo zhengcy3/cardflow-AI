@@ -2,6 +2,10 @@ package ai.cardflow.api.service;
 
 import ai.cardflow.api.config.AppProperties;
 import ai.cardflow.api.exception.ApiErrorMessages;
+import ai.cardflow.api.image.AspectRatioMapper;
+import ai.cardflow.api.image.CreativeImagePromptComposer;
+import ai.cardflow.api.image.ImageGenerationRequest;
+import ai.cardflow.api.image.ImageProvider;
 import ai.cardflow.api.model.ApiModels.CardPageResponse;
 import ai.cardflow.api.model.ApiModels.CreateProjectRequest;
 import ai.cardflow.api.model.ApiModels.ProjectResponse;
@@ -10,6 +14,8 @@ import ai.cardflow.api.model.ApiModels.UpdateProjectContentRequest;
 import ai.cardflow.api.model.RenderModels.RenderPage;
 import ai.cardflow.api.render.HtmlTemplateRenderer;
 import ai.cardflow.api.render.PlaywrightScreenshotService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +37,8 @@ public class ProjectService {
   private final AppProperties properties;
   private final HtmlTemplateRenderer htmlTemplateRenderer;
   private final PlaywrightScreenshotService playwrightScreenshotService;
+  private final ImageProvider imageProvider;
+  private final ObjectMapper objectMapper;
 
   /**
    * 注入作品服务依赖。
@@ -39,17 +47,23 @@ public class ProjectService {
    * @param properties 应用配置
    * @param htmlTemplateRenderer HTML 模板渲染器
    * @param playwrightScreenshotService PNG 截图服务
+   * @param imageProvider AI 生图 Provider
+   * @param objectMapper JSON 解析器
    */
   public ProjectService(
     JdbcTemplate jdbc,
     AppProperties properties,
     HtmlTemplateRenderer htmlTemplateRenderer,
-    PlaywrightScreenshotService playwrightScreenshotService
+    PlaywrightScreenshotService playwrightScreenshotService,
+    ImageProvider imageProvider,
+    ObjectMapper objectMapper
   ) {
     this.jdbc = jdbc;
     this.properties = properties;
     this.htmlTemplateRenderer = htmlTemplateRenderer;
     this.playwrightScreenshotService = playwrightScreenshotService;
+    this.imageProvider = imageProvider;
+    this.objectMapper = objectMapper;
   }
 
   /**
@@ -159,29 +173,33 @@ public class ProjectService {
       Files.createDirectories(outputDir);
       // 重新渲染时先删除旧页面记录，随后按最新 JSON 重新写入。
       jdbc.update("delete from card_page where project_id = ?", id);
-      for (RenderPage page : htmlTemplateRenderer.pages(project)) {
-        String fileName = "page-%02d.png".formatted(page.pageIndex() + 1);
-        Path outputFile = outputDir.resolve(fileName);
-        playwrightScreenshotService.screenshot(
-          htmlTemplateRenderer.render(project, page),
-          htmlTemplateRenderer.canvas(project.ratio()),
-          outputFile
-        );
-        // URL 路径与 WebConfig 中的 /outputs/** 静态映射保持一致。
-        String imageUrl = "/outputs/" + properties.app().defaultUserId() + "/" + id + "/" + fileName;
-        imageUrls.add(imageUrl);
-        jdbc.update("""
-          insert into card_page (id, project_id, page_index, role, content_json, image_url, created_at)
-          values (?, ?, ?, ?, ?, ?, ?)
-          """,
-          UUID.randomUUID().toString(),
-          id,
-          page.pageIndex(),
-          page.role(),
-          page.contentJson(),
-          imageUrl,
-          now
-        );
+      if ("ai_creative_image".equals(project.renderMode())) {
+        imageUrls.add(renderCreativeImage(project, id, outputDir, now));
+      } else {
+        for (RenderPage page : htmlTemplateRenderer.pages(project)) {
+          String fileName = "page-%02d.png".formatted(page.pageIndex() + 1);
+          Path outputFile = outputDir.resolve(fileName);
+          playwrightScreenshotService.screenshot(
+            htmlTemplateRenderer.render(project, page),
+            htmlTemplateRenderer.canvas(project.ratio()),
+            outputFile
+          );
+          // URL 路径与 WebConfig 中的 /outputs/** 静态映射保持一致。
+          String imageUrl = "/outputs/" + properties.app().defaultUserId() + "/" + id + "/" + fileName;
+          imageUrls.add(imageUrl);
+          jdbc.update("""
+            insert into card_page (id, project_id, page_index, role, content_json, image_url, created_at)
+            values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            UUID.randomUUID().toString(),
+            id,
+            page.pageIndex(),
+            page.role(),
+            page.contentJson(),
+            imageUrl,
+            now
+          );
+        }
       }
     } catch (IOException e) {
       throw new IllegalStateException(ApiErrorMessages.toUserMessage(e));
@@ -212,6 +230,38 @@ public class ProjectService {
     );
     jdbc.update("update card_project set cover_url = ?, status = ?, updated_at = ? where id = ?", coverUrl, "rendered", now, id);
     return new RenderProjectResponse(taskId, imageUrls);
+  }
+
+  private String renderCreativeImage(ProjectResponse project, String projectId, Path outputDir, String now) throws IOException {
+    JsonNode content = objectMapper.readTree(project.contentJson());
+    String prompt = CreativeImagePromptComposer.toMiniMaxPrompt(content);
+    if (prompt.isBlank()) {
+      throw new IllegalStateException("作品缺少生图 prompt，请重新生成内容。");
+    }
+
+    byte[] imageBytes = imageProvider.generate(new ImageGenerationRequest(
+      prompt,
+      AspectRatioMapper.fromOutputFormat(project.ratio())
+    ));
+
+    String fileName = "page-01.png";
+    Path outputFile = outputDir.resolve(fileName);
+    Files.write(outputFile, imageBytes);
+
+    String imageUrl = "/outputs/" + properties.app().defaultUserId() + "/" + projectId + "/" + fileName;
+    jdbc.update("""
+      insert into card_page (id, project_id, page_index, role, content_json, image_url, created_at)
+      values (?, ?, ?, ?, ?, ?, ?)
+      """,
+      UUID.randomUUID().toString(),
+      projectId,
+      0,
+      "cover",
+      project.contentJson(),
+      imageUrl,
+      now
+    );
+    return imageUrl;
   }
 
   /**

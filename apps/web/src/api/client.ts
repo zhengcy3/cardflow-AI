@@ -1,5 +1,9 @@
 export type GenerationMode = "topic" | "article";
-export type RenderMode = "precise_card" | "ai_creative_image" | "hybrid";
+export type RenderMode = "precise_card" | "ai_creative_image";
+
+export function normalizeRenderMode(mode: string): RenderMode {
+  return mode === "ai_creative_image" ? "ai_creative_image" : "precise_card";
+}
 export type OutputFormat = "xhs_3_4" | "youtube_16_9" | "bilibili_16_9" | "douyin_9_16";
 
 export interface GenerateContentPayload {

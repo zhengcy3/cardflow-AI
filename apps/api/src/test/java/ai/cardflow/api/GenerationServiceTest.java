@@ -9,6 +9,7 @@ import ai.cardflow.api.config.AppProperties;
 import ai.cardflow.api.database.DatabaseInitializer;
 import ai.cardflow.api.model.ApiModels.GenerateContentRequest;
 import ai.cardflow.api.model.ApiModels.TopicInput;
+import ai.cardflow.api.service.CreativeImageValidator;
 import ai.cardflow.api.service.GenerationService;
 import ai.cardflow.api.service.HtmlCardValidator;
 import ai.cardflow.api.skill.SkillRegistry;
@@ -32,7 +33,10 @@ class GenerationServiceTest {
   void setUp() {
     AppProperties properties = new AppProperties(
       new AppProperties.Storage("storage/outputs"),
-      new AppProperties.App("local-user")
+      new AppProperties.App("local-user"),
+      new AppProperties.Image("minimax", new AppProperties.MiniMaxImage(
+        "https://api.minimaxi.com", "test-key", "image-01", false
+      ))
     );
     DriverManagerDataSource dataSource = new DriverManagerDataSource("jdbc:sqlite:" + tempDir.resolve("cardflow-test.db"));
     dataSource.setDriverClassName("org.sqlite.JDBC");
@@ -57,7 +61,7 @@ class GenerationServiceTest {
         """);
 
     generationService = new GenerationService(
-      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
+      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
     );
   }
 
@@ -78,5 +82,43 @@ class GenerationServiceTest {
     Integer usageCount = jdbc.queryForObject("select count(*) from usage_record where model_name = 'deepseek-v4-flash'", Integer.class);
     assertThat(taskCount).isEqualTo(1);
     assertThat(usageCount).isEqualTo(1);
+  }
+
+  @Test
+  void generatesCreativeImageJsonForAiCreativeMode() {
+    String creativeJson = """
+        {"kind":"ai_creative_image","title":"成长封面","subtitle":"消费知识不等于成长","coreTension":"输入不等于成长","visualMetaphor":"左边堆书右边空转齿轮","prompt":"A warm cover about growth","styleNotes":"warm"}
+        """;
+    ChatClient chatClient = mock(ChatClient.class);
+    ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
+    ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
+    when(chatClient.prompt()).thenReturn(requestSpec);
+    when(requestSpec.system(any(String.class))).thenReturn(requestSpec);
+    when(requestSpec.user(any(String.class))).thenReturn(requestSpec);
+    when(requestSpec.call()).thenReturn(responseSpec);
+    when(responseSpec.content()).thenReturn(creativeJson);
+
+    SkillRegistry skillRegistry = mock(SkillRegistry.class);
+    AppProperties properties = new AppProperties(
+      new AppProperties.Storage("storage/outputs"),
+      new AppProperties.App("local-user"),
+      new AppProperties.Image("minimax", new AppProperties.MiniMaxImage(
+        "https://api.minimaxi.com", "test-key", "image-01", false
+      ))
+    );
+    generationService = new GenerationService(
+      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
+    );
+
+    var response = generationService.generate(new GenerateContentRequest(
+      "topic",
+      "xhs_3_4",
+      "ai_creative_image",
+      "xiaohongshu-highlight",
+      new TopicInput("为什么学了很多却还是没成长？", "消费知识不等于成长", "暖色调封面"),
+      null
+    ));
+
+    assertThat(response.contentJson()).contains("\"kind\":\"ai_creative_image\"");
   }
 }
