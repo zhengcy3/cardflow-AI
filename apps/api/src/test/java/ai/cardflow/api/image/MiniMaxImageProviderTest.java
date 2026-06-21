@@ -25,7 +25,7 @@ class MiniMaxImageProviderTest {
       new AppProperties.Storage("storage/outputs"),
       new AppProperties.App("local-user"),
       new AppProperties.Image("minimax", new AppProperties.MiniMaxImage(
-        "https://api.minimaxi.com", "test-key", "image-01", false
+        "https://api.minimaxi.com", "test-key", "image-01", false, true, "image-01"
       ))
     );
     provider = new MiniMaxImageProvider(properties, new ObjectMapper(), builder);

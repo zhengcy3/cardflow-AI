@@ -1,8 +1,10 @@
 export type GenerationMode = "topic" | "article";
-export type RenderMode = "precise_card" | "ai_creative_image";
+export type RenderMode = "precise_card" | "ai_creative_image" | "ai_knowledge_poster";
 
 export function normalizeRenderMode(mode: string): RenderMode {
-  return mode === "ai_creative_image" ? "ai_creative_image" : "precise_card";
+  if (mode === "ai_creative_image") return "ai_creative_image";
+  if (mode === "ai_knowledge_poster") return "ai_knowledge_poster";
+  return "precise_card";
 }
 export type OutputFormat = "xhs_3_4" | "youtube_16_9" | "bilibili_16_9" | "douyin_9_16";
 

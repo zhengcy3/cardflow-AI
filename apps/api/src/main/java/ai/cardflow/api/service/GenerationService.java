@@ -8,6 +8,7 @@ import ai.cardflow.api.model.ApiModels.GenerateContentRequest;
 import ai.cardflow.api.model.ApiModels.GenerateContentResponse;
 import ai.cardflow.api.model.ApiModels.TopicInput;
 import ai.cardflow.api.skill.SkillRegistry;
+import ai.cardflow.api.poster.KnowledgePosterValidator;
 import ai.cardflow.api.image.AspectRatioMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -55,6 +56,43 @@ public class GenerationService {
       - 竖屏封面主体居中，横屏封面强对比+留白
       """;
 
+  private static final String KNOWLEDGE_POSTER_SYSTEM_PROMPT = """
+      你是 CardFlow AI 知识海报设计师。任务：根据用户主题生成「一次性出整图」的小红书风格知识海报结构化 JSON。
+
+      目标效果：类似 ChatGPT 生成的知识卡片海报——左文右图、标题+要点+对勾、便签贴纸、手写装饰、真实摄影场景，整体是一张完整平面设计，不是纯插图。
+
+      只返回 JSON，不要 Markdown 代码块：
+      {
+        "kind": "ai_knowledge_poster",
+        "title": "主标题，可断行，8-20字",
+        "subtitle": "副标题或观点补充",
+        "eyebrow": "小标签，如：为什么",
+        "handwrittenAccent": "手写风格装饰语，如：越努力，越迷茫？",
+        "points": ["要点1，6-12字", "要点2", "要点3"],
+        "callout": "底部强调语，10字以内，如：知识要转化才真正成长",
+        "stickyNotes": ["听过", "没改变"],
+        "sceneDescription": "英文描述右下角/指定区域的摄影场景，如：tired young woman resting head on desk beside tall book stack, warm desk lamp, cozy study room",
+        "layout": "版式说明，如：left text hierarchy with checkmarks, bottom-right realistic photo scene",
+        "colorPalette": "warm beige cream brown soft editorial palette",
+        "platformStyle": "Xiaohongshu knowledge blogger infographic poster",
+        "aspectRatio": "3:4",
+        "styleNotes": "mixed typography, speech bubble, star badge, clean modern"
+      }
+
+      规则：
+      - kind 固定为 ai_knowledge_poster
+      - **所有会出现在海报上的文案字段必须是简体中文**：title、subtitle、eyebrow、handwrittenAccent、points、callout、stickyNotes
+      - 严禁在 title/points/callout 等字段使用英文单词或英文标题（如 KNOWLEDGE、COMMON PITFALLS）
+      - sceneDescription/layout/colorPalette/styleNotes 可中英混合，但仅用于描述画面，不是海报上的可读文字
+      - title/points 必须紧扣用户主题，短句化，适合小红书
+      - **控制文字量**：title 8-14字；points 固定 3 条，每条 6-12字；callout 10字以内；stickyNotes 最多 2 条
+      - 海报上总中文不超过 60 字，字少才清晰，不要堆砌信息
+      - stickyNotes 可选，最多 2 条短词；handwrittenAccent 可选，最多 8 字
+      - sceneDescription 用英文，描述与主题相关的真实场景，供生图模型绘制
+      - layout/colorPalette/platformStyle/aspectRatio 必填
+      - 字符串里的引号用中文「」，不要用英文双引号
+      """;
+
   private final String modelName;
   private final int maxTokens;
 
@@ -64,6 +102,7 @@ public class GenerationService {
   private final SkillRegistry skillRegistry;
   private final HtmlCardValidator validator;
   private final CreativeImageValidator creativeImageValidator;
+  private final KnowledgePosterValidator knowledgePosterValidator;
   private final ObjectMapper objectMapper;
 
   public GenerationService(
@@ -73,6 +112,7 @@ public class GenerationService {
     SkillRegistry skillRegistry,
     HtmlCardValidator validator,
     CreativeImageValidator creativeImageValidator,
+    KnowledgePosterValidator knowledgePosterValidator,
     ObjectMapper objectMapper,
     @Value("${spring.ai.openai.chat.options.model:deepseek-v4-flash}") String modelName,
     @Value("${spring.ai.openai.chat.options.max-tokens:2048}") int maxTokens
@@ -83,6 +123,7 @@ public class GenerationService {
     this.skillRegistry = skillRegistry;
     this.validator = validator;
     this.creativeImageValidator = creativeImageValidator;
+    this.knowledgePosterValidator = knowledgePosterValidator;
     this.objectMapper = objectMapper;
     this.modelName = modelName;
     this.maxTokens = maxTokens;
@@ -129,7 +170,14 @@ public class GenerationService {
 
     try {
       String contentJson;
-      if (isCreativeImageMode(request)) {
+      if (isKnowledgePosterMode(request)) {
+        contentJson = chatClient.prompt()
+          .system(KNOWLEDGE_POSTER_SYSTEM_PROMPT)
+          .user(buildKnowledgePosterUserPrompt(request))
+          .call()
+          .content();
+        knowledgePosterValidator.validate(objectMapper.readTree(contentJson));
+      } else if (isCreativeImageMode(request)) {
         contentJson = chatClient.prompt()
           .system(CREATIVE_IMAGE_SYSTEM_PROMPT)
           .user(buildCreativeImageUserPrompt(request))
@@ -220,6 +268,57 @@ public class GenerationService {
 
   private boolean isCreativeImageMode(GenerateContentRequest request) {
     return "ai_creative_image".equals(request.renderMode());
+  }
+
+  private boolean isKnowledgePosterMode(GenerateContentRequest request) {
+    return "ai_knowledge_poster".equals(request.renderMode());
+  }
+
+  private String buildKnowledgePosterUserPrompt(GenerateContentRequest request) {
+    OutputSpec output = posterOutputSpec(request.outputFormat());
+    if ("article".equals(request.generationMode())) {
+      return """
+          请根据下面文章生成一张 AI 知识海报 JSON（一次性出整图，含标题、4要点、场景描述）：
+          平台规格：%s
+          画面比例：%s
+          海报策略：%s
+          文章正文：
+          %s
+          """.formatted(
+          output.label(), output.aspectRatio(), output.strategy(),
+          safe(request.articleInput() == null ? "" : request.articleInput().body())
+      );
+    }
+    TopicInput topic = request.topicInput();
+    return """
+        请根据下面主题生成一张 AI 知识海报 JSON（一次性出整图，含标题、4要点、场景描述）：
+        平台规格：%s
+        画面比例：%s
+        海报策略：%s
+        主题标题：%s
+        副标题或上下文：%s
+        补充说明：%s
+        """.formatted(
+        output.label(), output.aspectRatio(), output.strategy(),
+        safe(topic == null ? "" : topic.title()),
+        safe(topic == null ? "" : topic.subtitle()),
+        safe(topic == null ? "" : topic.instructions())
+    );
+  }
+
+  private OutputSpec posterOutputSpec(String outputFormat) {
+    String format = safe(outputFormat);
+    String aspectRatio = AspectRatioMapper.fromOutputFormat(format);
+    return switch (format) {
+      case "youtube_16_9" -> new OutputSpec("YouTube 知识海报 16:9", 1280, 720, aspectRatio,
+        "横版海报：左侧大标题+3要点，右侧人物/场景摄影，强对比，适合视频封面。");
+      case "bilibili_16_9" -> new OutputSpec("B站知识海报 16:9", 1280, 720, aspectRatio,
+        "横版知识区海报：大标题+要点清单+场景图，信息层级清晰。");
+      case "douyin_9_16" -> new OutputSpec("抖音知识海报 9:16", 900, 1600, aspectRatio,
+        "竖屏海报：标题靠上，要点居中，下方场景图，适合竖屏封面。");
+      default -> new OutputSpec("小红书知识海报 3:4", 900, 1200, aspectRatio,
+        "竖版海报：大标题+3条短要点+小场景插画；文字要少、字号要大；全部简体中文；避免信息堆砌。");
+    };
   }
 
   private String buildCreativeImageUserPrompt(GenerateContentRequest request) {

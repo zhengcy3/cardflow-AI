@@ -9,6 +9,7 @@ import ai.cardflow.api.config.AppProperties;
 import ai.cardflow.api.database.DatabaseInitializer;
 import ai.cardflow.api.model.ApiModels.GenerateContentRequest;
 import ai.cardflow.api.model.ApiModels.TopicInput;
+import ai.cardflow.api.poster.KnowledgePosterValidator;
 import ai.cardflow.api.service.CreativeImageValidator;
 import ai.cardflow.api.service.GenerationService;
 import ai.cardflow.api.service.HtmlCardValidator;
@@ -35,7 +36,7 @@ class GenerationServiceTest {
       new AppProperties.Storage("storage/outputs"),
       new AppProperties.App("local-user"),
       new AppProperties.Image("minimax", new AppProperties.MiniMaxImage(
-        "https://api.minimaxi.com", "test-key", "image-01", false
+        "https://api.minimaxi.com", "test-key", "image-01", false, true, "image-01"
       ))
     );
     DriverManagerDataSource dataSource = new DriverManagerDataSource("jdbc:sqlite:" + tempDir.resolve("cardflow-test.db"));
@@ -61,7 +62,7 @@ class GenerationServiceTest {
         """);
 
     generationService = new GenerationService(
-      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
+      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new KnowledgePosterValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
     );
   }
 
@@ -103,11 +104,11 @@ class GenerationServiceTest {
       new AppProperties.Storage("storage/outputs"),
       new AppProperties.App("local-user"),
       new AppProperties.Image("minimax", new AppProperties.MiniMaxImage(
-        "https://api.minimaxi.com", "test-key", "image-01", false
+        "https://api.minimaxi.com", "test-key", "image-01", false, true, "image-01"
       ))
     );
     generationService = new GenerationService(
-      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
+      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new KnowledgePosterValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
     );
 
     var response = generationService.generate(new GenerateContentRequest(
@@ -120,5 +121,43 @@ class GenerationServiceTest {
     ));
 
     assertThat(response.contentJson()).contains("\"kind\":\"ai_creative_image\"");
+  }
+
+  @Test
+  void generatesKnowledgePosterJsonForPosterMode() {
+    String posterJson = """
+        {"kind":"ai_knowledge_poster","title":"学了很多 却还是 没成长？","subtitle":"消费知识不等于成长","eyebrow":"为什么","handwrittenAccent":"越努力，越迷茫？","points":["学 ≠ 会用","输入 ≠ 成长","方法比努力更重要"],"callout":"知识要转化才真正成长","stickyNotes":["听过","没改变"],"sceneDescription":"tired woman at desk with books","layout":"left text right photo","colorPalette":"warm beige","platformStyle":"Xiaohongshu poster","aspectRatio":"3:4","styleNotes":"infographic"}
+        """;
+    ChatClient chatClient = mock(ChatClient.class);
+    ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
+    ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
+    when(chatClient.prompt()).thenReturn(requestSpec);
+    when(requestSpec.system(any(String.class))).thenReturn(requestSpec);
+    when(requestSpec.user(any(String.class))).thenReturn(requestSpec);
+    when(requestSpec.call()).thenReturn(responseSpec);
+    when(responseSpec.content()).thenReturn(posterJson);
+
+    SkillRegistry skillRegistry = mock(SkillRegistry.class);
+    AppProperties properties = new AppProperties(
+      new AppProperties.Storage("storage/outputs"),
+      new AppProperties.App("local-user"),
+      new AppProperties.Image("minimax", new AppProperties.MiniMaxImage(
+        "https://api.minimaxi.com", "test-key", "image-01", false, true, "image-01"
+      ))
+    );
+    generationService = new GenerationService(
+      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new KnowledgePosterValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
+    );
+
+    var response = generationService.generate(new GenerateContentRequest(
+      "topic",
+      "xhs_3_4",
+      "ai_knowledge_poster",
+      "xiaohongshu-highlight",
+      new TopicInput("为什么学了很多却还是没成长？", "消费知识不等于成长", "暖米色小红书风"),
+      null
+    ));
+
+    assertThat(response.contentJson()).contains("\"kind\":\"ai_knowledge_poster\"");
   }
 }

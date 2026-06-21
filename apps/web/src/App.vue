@@ -292,7 +292,13 @@ async function runGeneration() {
   if (isGenerating.value) return;
 
   isGenerating.value = true;
-  setStatus(renderMode.value === "ai_creative_image" ? "AI 正在生成创意图提示词" : "AI 正在生成卡片");
+  setStatus(
+    renderMode.value === "ai_knowledge_poster"
+      ? "AI 正在生成知识海报文案"
+      : renderMode.value === "ai_creative_image"
+        ? "AI 正在生成创意图提示词"
+        : "AI 正在生成卡片"
+  );
 
   try {
     const generated = await generateContent({
@@ -308,7 +314,11 @@ async function runGeneration() {
     const card = parseHtmlCard(generated.contentJson);
     const title = card?.title?.trim() || topicInput.value.title;
 
-    setStatus(renderMode.value === "ai_creative_image" ? "MiniMax 正在生图" : "正在出图");
+    setStatus(
+      renderMode.value === "ai_knowledge_poster" || renderMode.value === "ai_creative_image"
+        ? "MiniMax 正在生图"
+        : "正在出图"
+    );
 
     currentProject.value = await createProject({
       title,
@@ -440,7 +450,11 @@ void listTemplates().then((items) => {
                 </button>
                 <button class="engine-card" :class="{ active: renderMode === 'ai_creative_image' }" type="button" @click="renderMode = 'ai_creative_image'">
                   <span class="engine-name">AI 创意图</span>
-                  <span class="engine-desc">MiniMax 生图，适合封面视觉和氛围图。</span>
+                  <span class="engine-desc">MiniMax 生图，适合文章插图和氛围图。</span>
+                </button>
+                <button class="engine-card" :class="{ active: renderMode === 'ai_knowledge_poster' }" type="button" @click="renderMode = 'ai_knowledge_poster'">
+                  <span class="engine-name">AI 知识海报</span>
+                  <span class="engine-desc">一次生成带标题要点的完整卡片海报。</span>
                 </button>
               </div>
 

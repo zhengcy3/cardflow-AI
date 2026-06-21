@@ -41,15 +41,17 @@ public class MiniMaxImageProvider implements ImageProvider {
     }
 
     Map<String, Object> payload = new LinkedHashMap<>();
-    payload.put("model", config.model());
+    String model = resolveModel(request);
+    boolean promptOptimizer = resolvePromptOptimizer(request);
+    payload.put("model", model);
     payload.put("prompt", request.prompt());
     payload.put("aspect_ratio", request.aspectRatio());
     payload.put("response_format", "base64");
     payload.put("n", 1);
-    payload.put("prompt_optimizer", config.promptOptimizer());
+    payload.put("prompt_optimizer", promptOptimizer);
 
-    log.info("MiniMax image generation started model={} aspectRatio={} promptLength={}",
-      config.model(), request.aspectRatio(), request.prompt().length());
+    log.info("MiniMax image generation started model={} aspectRatio={} promptOptimizer={} promptLength={}",
+      model, request.aspectRatio(), promptOptimizer, request.prompt().length());
 
     String responseBody = restClient.post()
       .uri("/v1/image_generation")
@@ -59,6 +61,20 @@ public class MiniMaxImageProvider implements ImageProvider {
       .body(String.class);
 
     return decodeImage(responseBody);
+  }
+
+  private String resolveModel(ImageGenerationRequest request) {
+    if (request.model() != null && !request.model().isBlank()) {
+      return request.model();
+    }
+    return config.model();
+  }
+
+  private boolean resolvePromptOptimizer(ImageGenerationRequest request) {
+    if (request.promptOptimizer() != null) {
+      return request.promptOptimizer();
+    }
+    return config.promptOptimizer();
   }
 
   private byte[] decodeImage(String responseBody) {

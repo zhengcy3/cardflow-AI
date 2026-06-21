@@ -128,11 +128,12 @@ mvn -f apps/api/pom.xml exec:java -e -Dexec.mainClass=com.microsoft.playwright.C
 - 主题生成
 - 文章生成入口暂时禁用，等待真实 AI 规则接入
 - 小红书、YouTube、B站、抖音输出比例选择
-- HTML 精准卡片、AI 创意图两种出图方式
+- HTML 精准卡片、AI 创意图、AI 知识海报三种出图方式
 - 最近作品列表
 - 右侧未生成前展示卡片占位预览，生成后展示真实 PNG，并使用应用内弹窗预览大图
 - 动态 HTML 内容生成，并自动保存、渲染到作品历史
 - AI 创意图模式：DeepSeek 生成生图 prompt + MiniMax image-01 文生图输出 PNG
+- AI 知识海报模式：DeepSeek 生成海报结构化文案 + MiniMax 一次生成带版式的中文知识海报图
 
 ## 当前还没完成
 

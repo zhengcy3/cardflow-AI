@@ -4,6 +4,7 @@ import ai.cardflow.api.config.AppProperties;
 import ai.cardflow.api.exception.ApiErrorMessages;
 import ai.cardflow.api.image.AspectRatioMapper;
 import ai.cardflow.api.image.CreativeImagePromptComposer;
+import ai.cardflow.api.poster.KnowledgePosterPromptComposer;
 import ai.cardflow.api.image.ImageGenerationRequest;
 import ai.cardflow.api.image.ImageProvider;
 import ai.cardflow.api.model.ApiModels.CardPageResponse;
@@ -173,8 +174,8 @@ public class ProjectService {
       Files.createDirectories(outputDir);
       // 重新渲染时先删除旧页面记录，随后按最新 JSON 重新写入。
       jdbc.update("delete from card_page where project_id = ?", id);
-      if ("ai_creative_image".equals(project.renderMode())) {
-        imageUrls.add(renderCreativeImage(project, id, outputDir, now));
+      if (isAiImageRenderMode(project.renderMode())) {
+        imageUrls.add(renderAiImage(project, id, outputDir, now));
       } else {
         for (RenderPage page : htmlTemplateRenderer.pages(project)) {
           String fileName = "page-%02d.png".formatted(page.pageIndex() + 1);
@@ -232,17 +233,18 @@ public class ProjectService {
     return new RenderProjectResponse(taskId, imageUrls);
   }
 
-  private String renderCreativeImage(ProjectResponse project, String projectId, Path outputDir, String now) throws IOException {
+  private static boolean isAiImageRenderMode(String renderMode) {
+    return "ai_creative_image".equals(renderMode) || "ai_knowledge_poster".equals(renderMode);
+  }
+
+  private String renderAiImage(ProjectResponse project, String projectId, Path outputDir, String now) throws IOException {
     JsonNode content = objectMapper.readTree(project.contentJson());
-    String prompt = CreativeImagePromptComposer.toMiniMaxPrompt(content);
+    String prompt = toAiImagePrompt(project.renderMode(), content, project.ratio());
     if (prompt.isBlank()) {
       throw new IllegalStateException("作品缺少生图 prompt，请重新生成内容。");
     }
 
-    byte[] imageBytes = imageProvider.generate(new ImageGenerationRequest(
-      prompt,
-      AspectRatioMapper.fromOutputFormat(project.ratio())
-    ));
+    byte[] imageBytes = imageProvider.generate(toImageRequest(project.renderMode(), prompt, project.ratio()));
 
     String fileName = "page-01.png";
     Path outputFile = outputDir.resolve(fileName);
@@ -262,6 +264,36 @@ public class ProjectService {
       now
     );
     return imageUrl;
+  }
+
+  private ImageGenerationRequest toImageRequest(String renderMode, String prompt, String ratio) {
+    String aspectRatio = AspectRatioMapper.fromOutputFormat(ratio);
+    if ("ai_knowledge_poster".equals(renderMode)) {
+      AppProperties.MiniMaxImage minimax = properties.image().minimax();
+      return new ImageGenerationRequest(
+        prompt,
+        aspectRatio,
+        minimax.posterPromptOptimizer(),
+        minimax.posterModel()
+      );
+    }
+    return new ImageGenerationRequest(prompt, aspectRatio);
+  }
+
+  private String toAiImagePrompt(String renderMode, JsonNode content, String ratio) {
+    if ("ai_knowledge_poster".equals(renderMode)) {
+      return KnowledgePosterPromptComposer.toMiniMaxPrompt(enrichPosterContent(content, ratio));
+    }
+    return CreativeImagePromptComposer.toMiniMaxPrompt(content);
+  }
+
+  private JsonNode enrichPosterContent(JsonNode content, String ratio) {
+    if (!content.path("aspectRatio").asText("").isBlank()) {
+      return content;
+    }
+    var enriched = ((com.fasterxml.jackson.databind.node.ObjectNode) content.deepCopy());
+    enriched.put("aspectRatio", AspectRatioMapper.fromOutputFormat(ratio));
+    return enriched;
   }
 
   /**

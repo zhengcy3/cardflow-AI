@@ -38,7 +38,16 @@ public record AppProperties(Storage storage, App app, Image image) {
    * @param baseUrl API 根地址
    * @param apiKey Bearer Token
    * @param model 模型名称，默认 image-01
-   * @param promptOptimizer 是否启用提示词自动优化
+   * @param promptOptimizer 创意图等默认是否启用提示词自动优化
+   * @param posterPromptOptimizer 知识海报是否启用提示词自动优化
+   * @param posterModel 知识海报使用的模型，可与默认 model 不同
    */
-  public record MiniMaxImage(String baseUrl, String apiKey, String model, boolean promptOptimizer) {}
+  public record MiniMaxImage(
+    String baseUrl,
+    String apiKey,
+    String model,
+    boolean promptOptimizer,
+    boolean posterPromptOptimizer,
+    String posterModel
+  ) {}
 }
