@@ -162,9 +162,15 @@ public class DatabaseInitializer implements ApplicationRunner {
    */
   private void seedTemplates() {
     String now = Instant.now().toString();
-    seedTemplate("xiaohongshu-highlight", "小红书高亮", "强标题 / 重点突出", "xiaohongshu_highlight", now);
+    seedTemplate("xiaohongshu-highlight", "小红书高亮", "强标题 / 色块高亮", "xiaohongshu_highlight", now);
     seedTemplate("minimal-apple", "极简苹果风", "大留白 / 高级感", "minimal_apple", now);
     seedTemplate("business-briefing", "商业简报", "数据化 / 理性", "business_briefing", now);
+    seedTemplate("editorial-ink", "电子杂志墨水", "Monocle 风 / 低饱和", "editorial_ink", now);
+    seedTemplate("swiss-grid", "瑞士网格", "网格 / 单一 accent", "swiss_grid", now);
+    seedTemplate("hand-sketch", "手绘笔记", "马克笔 / 便签感", "hand_sketch", now);
+    seedTemplate("flat-infographic", "扁平信息图", "粉彩 / 几何图标", "flat_infographic", now);
+    seedTemplate("warm-documentary", "人文纪实", "自然光 / 真实场景", "warm_documentary", now);
+    seedTemplate("bold-cover", "高冲击封面", "高对比 / 电影感", "bold_cover", now);
   }
 
   /**

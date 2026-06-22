@@ -18,7 +18,7 @@ spring:
         options:
           model: deepseek-v4-flash
           temperature: 0.85
-          max-tokens: 2048
+          max-tokens: 4096
 
 cardflow:
   storage:

@@ -547,7 +547,7 @@ void listTemplates().then((items) => {
               </div>
               <div v-else class="empty-state style-empty">正在加载可用风格…</div>
 
-              <p class="style-hint">风格列表来自模板配置，后续会随提示词与 Skill 动态扩展。</p>
+              <p class="style-hint">九套风格：小红书高亮、极简苹果、商业简报、电子杂志、瑞士网格、手绘笔记、扁平信息图、人文纪实、高冲击封面。</p>
             </section>
           </aside>
         </section>

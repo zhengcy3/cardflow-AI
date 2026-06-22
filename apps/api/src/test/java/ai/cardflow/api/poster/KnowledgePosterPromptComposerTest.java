@@ -37,6 +37,7 @@ class KnowledgePosterPromptComposerTest {
     assertThat(prompt).contains("tired young woman");
     assertThat(prompt).contains("简体中文");
     assertThat(prompt).contains("gibberish");
-    assertThat(prompt).contains("3 bullet points");
+    assertThat(prompt).contains("NEVER overlap");
+    assertThat(prompt).contains("Card 1");
   }
 }

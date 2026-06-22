@@ -45,7 +45,7 @@ npm run dev:api
 
 MiniMax 生图 Key 配置在 `apps/api/src/main/resources/application.yml` 的 `cardflow.image.minimax.api-key`。AI 创意图模式会先用 DeepSeek 生成生图 prompt，再调用 MiniMax 输出 PNG。
 
-DeepSeek 默认使用 `deepseek-v4-flash`（比 v4-pro 便宜约 3 倍），输出上限 `spring.ai.openai.chat.options.max-tokens: 2048`。每次生成会在日志中输出 API 轮次、token 用量和实际 responseModel。
+DeepSeek 默认使用 `deepseek-v4-flash`（比 v4-pro 便宜约 3 倍），输出上限 `spring.ai.openai.chat.options.max-tokens: 4096`（截断时自动以 8192 重试一次）。每次生成会在日志中输出 API 轮次、token 用量和实际 responseModel。
 
 后端地址：
 
@@ -129,6 +129,7 @@ mvn -f apps/api/pom.xml exec:java -e -Dexec.mainClass=com.microsoft.playwright.C
 - 文章生成入口暂时禁用，等待真实 AI 规则接入
 - 小红书、YouTube、B站、抖音输出比例选择
 - HTML 精准卡片、AI 创意图、AI 知识海报三种出图方式
+- 九套封面风格（Palette × Rendering）：小红书高亮、极简苹果、商业简报、电子杂志墨水、瑞士网格、手绘笔记、扁平信息图、人文纪实、高冲击封面
 - 最近作品列表
 - 右侧未生成前展示卡片占位预览，生成后展示真实 PNG，并使用应用内弹窗预览大图
 - 动态 HTML 内容生成，并自动保存、渲染到作品历史

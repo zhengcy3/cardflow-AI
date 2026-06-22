@@ -3,6 +3,8 @@ package ai.cardflow.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ai.cardflow.api.config.AppProperties;
@@ -50,6 +52,7 @@ class GenerationServiceTest {
     ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
     ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
     when(chatClient.prompt()).thenReturn(requestSpec);
+    when(requestSpec.options(any())).thenReturn(requestSpec);
     when(requestSpec.system(any(String.class))).thenReturn(requestSpec);
     when(requestSpec.user(any(String.class))).thenReturn(requestSpec);
     when(requestSpec.call()).thenReturn(responseSpec);
@@ -59,6 +62,14 @@ class GenerationServiceTest {
     when(skillRegistry.readFullContent("cardflow.html-card-generator")).thenReturn("""
         # CardFlow html_card 生成协议
         返回 JSON：kind/title/html/designNotes/warnings
+        """);
+    when(skillRegistry.readFullContent("cardflow.creative-image-generator")).thenReturn("""
+        # CardFlow AI 创意图生成协议
+        kind: ai_creative_image
+        """);
+    when(skillRegistry.readFullContent("cardflow.knowledge-poster-generator")).thenReturn("""
+        # CardFlow AI 知识海报生成协议
+        kind: ai_knowledge_poster
         """);
 
     generationService = new GenerationService(
@@ -94,12 +105,14 @@ class GenerationServiceTest {
     ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
     ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
     when(chatClient.prompt()).thenReturn(requestSpec);
+    when(requestSpec.options(any())).thenReturn(requestSpec);
     when(requestSpec.system(any(String.class))).thenReturn(requestSpec);
     when(requestSpec.user(any(String.class))).thenReturn(requestSpec);
     when(requestSpec.call()).thenReturn(responseSpec);
     when(responseSpec.content()).thenReturn(creativeJson);
 
     SkillRegistry skillRegistry = mock(SkillRegistry.class);
+    when(skillRegistry.readFullContent("cardflow.creative-image-generator")).thenReturn("creative skill");
     AppProperties properties = new AppProperties(
       new AppProperties.Storage("storage/outputs"),
       new AppProperties.App("local-user"),
@@ -132,12 +145,14 @@ class GenerationServiceTest {
     ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
     ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
     when(chatClient.prompt()).thenReturn(requestSpec);
+    when(requestSpec.options(any())).thenReturn(requestSpec);
     when(requestSpec.system(any(String.class))).thenReturn(requestSpec);
     when(requestSpec.user(any(String.class))).thenReturn(requestSpec);
     when(requestSpec.call()).thenReturn(responseSpec);
     when(responseSpec.content()).thenReturn(posterJson);
 
     SkillRegistry skillRegistry = mock(SkillRegistry.class);
+    when(skillRegistry.readFullContent("cardflow.knowledge-poster-generator")).thenReturn("poster skill");
     AppProperties properties = new AppProperties(
       new AppProperties.Storage("storage/outputs"),
       new AppProperties.App("local-user"),
@@ -159,5 +174,45 @@ class GenerationServiceTest {
     ));
 
     assertThat(response.contentJson()).contains("\"kind\":\"ai_knowledge_poster\"");
+  }
+
+  @Test
+  void retriesWhenJsonOutputIsTruncatedAtTokenLimit() {
+    String truncatedJson = "{\"kind\":\"html_card\",\"title\":\"x\",\"html\":\"<!doctype html><html><head></head><body><div>unfinished";
+    String validJson = "{\"kind\":\"html_card\",\"title\":\"x\",\"html\":\"<!doctype html><html><head></head><body></body></html>\",\"designNotes\":\"\",\"warnings\":[]}";
+
+    ChatClient chatClient = mock(ChatClient.class);
+    ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
+    ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
+    when(chatClient.prompt()).thenReturn(requestSpec);
+    when(requestSpec.options(any())).thenReturn(requestSpec);
+    when(requestSpec.system(any(String.class))).thenReturn(requestSpec);
+    when(requestSpec.user(any(String.class))).thenReturn(requestSpec);
+    when(requestSpec.call()).thenReturn(responseSpec);
+    when(responseSpec.content()).thenReturn(truncatedJson, validJson);
+
+    SkillRegistry skillRegistry = mock(SkillRegistry.class);
+    when(skillRegistry.readFullContent("cardflow.html-card-generator")).thenReturn("html skill");
+    AppProperties properties = new AppProperties(
+      new AppProperties.Storage("storage/outputs"),
+      new AppProperties.App("local-user"),
+      new AppProperties.Image("minimax", new AppProperties.MiniMaxImage(
+        "https://api.minimaxi.com", "test-key", "image-01", false, true, "image-01"
+      ))
+    );
+    generationService = new GenerationService(
+      jdbc, properties, chatClient, skillRegistry, new HtmlCardValidator(), new CreativeImageValidator(), new KnowledgePosterValidator(), new ObjectMapper(), "deepseek-v4-flash", 2048
+    );
+
+    var response = generationService.generate(new GenerateContentRequest(
+      "topic",
+      "xhs_3_4",
+      "precise_card",
+      "xiaohongshu-highlight",
+      new TopicInput("主题", "副标题", "补充"),
+      null
+    ));
+    assertThat(response.contentJson()).contains("\"kind\":\"html_card\"");
+    verify(requestSpec, times(2)).call();
   }
 }

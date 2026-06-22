@@ -37,6 +37,9 @@ JSON 外层协议必须完全匹配：
 可选布局关键词：comparison / flow / list / mindmap / quadrant。
 
 ## 视觉风格
+
+用户指定 styleKey 时按 read_skill("cardflow.image-styles") 调整配色；默认 xiaohongshu_highlight（暖色高亮扁平矢量）。
+
 优先做小红书知识卡，而不是 PPT 或咨询报告：
 - 标题要强，关键词可以使用高亮、色块、描边、标签、下划线。
 - 至少使用 1 个视觉结构：箭头、路径、编号、闭环、对比轴、分组卡片之一。

@@ -10,15 +10,20 @@ import ai.cardflow.api.model.ApiModels.TopicInput;
 import ai.cardflow.api.skill.SkillRegistry;
 import ai.cardflow.api.poster.KnowledgePosterValidator;
 import ai.cardflow.api.image.AspectRatioMapper;
+import ai.cardflow.api.image.ImageStylePresets;
+import ai.cardflow.api.image.ImageStylePresets.ImageStyle;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.io.JsonEOFException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,65 +38,9 @@ import org.springframework.stereotype.Service;
 public class GenerationService {
   private static final Logger log = LoggerFactory.getLogger(GenerationService.class);
   private static final String HTML_CARD_SKILL = "cardflow.html-card-generator";
-  private static final String CREATIVE_IMAGE_SYSTEM_PROMPT = """
-      你是 CardFlow AI 创意图提示词工程师。任务：把用户主题转成「与标题强关联」的 MiniMax 文生图 prompt。
-
-      只返回 JSON，不要 Markdown 代码块：
-      {
-        "kind": "ai_creative_image",
-        "title": "中文封面标题，优先使用用户主题标题",
-        "subtitle": "中文副标题或补充语境，可为空字符串",
-        "coreTension": "一句话说明标题的核心观点/矛盾/对比（中文）",
-        "visualMetaphor": "必须用画面表达的具体视觉隐喻（中文），例如：左边堆满未拆封的书，右边一颗很小的芽，强调输入≠成长",
-        "prompt": "英文或中英混合的详细画面描述，必须落实 visualMetaphor",
-        "styleNotes": "简短风格说明，如色调、摄影/插画风格、平台感"
-      }
-
-      规则：
-      - kind 固定为 ai_creative_image
-      - title/subtitle 必须来自用户输入，不要自造无关标题
-      - coreTension 必须紧扣标题观点，写出「真正要表达什么」
-      - visualMetaphor 必须具体、可画，禁止「书籍+植物+光效」等泛化意象，除非与用户观点直接相关
-      - prompt 不超过 900 字符，描述主体、构图、对比关系、光线、色调；不要要求画面出现大段可读文字
-      - 竖屏封面主体居中，横屏封面强对比+留白
-      """;
-
-  private static final String KNOWLEDGE_POSTER_SYSTEM_PROMPT = """
-      你是 CardFlow AI 知识海报设计师。任务：根据用户主题生成「一次性出整图」的小红书风格知识海报结构化 JSON。
-
-      目标效果：类似 ChatGPT 生成的知识卡片海报——左文右图、标题+要点+对勾、便签贴纸、手写装饰、真实摄影场景，整体是一张完整平面设计，不是纯插图。
-
-      只返回 JSON，不要 Markdown 代码块：
-      {
-        "kind": "ai_knowledge_poster",
-        "title": "主标题，可断行，8-20字",
-        "subtitle": "副标题或观点补充",
-        "eyebrow": "小标签，如：为什么",
-        "handwrittenAccent": "手写风格装饰语，如：越努力，越迷茫？",
-        "points": ["要点1，6-12字", "要点2", "要点3"],
-        "callout": "底部强调语，10字以内，如：知识要转化才真正成长",
-        "stickyNotes": ["听过", "没改变"],
-        "sceneDescription": "英文描述右下角/指定区域的摄影场景，如：tired young woman resting head on desk beside tall book stack, warm desk lamp, cozy study room",
-        "layout": "版式说明，如：left text hierarchy with checkmarks, bottom-right realistic photo scene",
-        "colorPalette": "warm beige cream brown soft editorial palette",
-        "platformStyle": "Xiaohongshu knowledge blogger infographic poster",
-        "aspectRatio": "3:4",
-        "styleNotes": "mixed typography, speech bubble, star badge, clean modern"
-      }
-
-      规则：
-      - kind 固定为 ai_knowledge_poster
-      - **所有会出现在海报上的文案字段必须是简体中文**：title、subtitle、eyebrow、handwrittenAccent、points、callout、stickyNotes
-      - 严禁在 title/points/callout 等字段使用英文单词或英文标题（如 KNOWLEDGE、COMMON PITFALLS）
-      - sceneDescription/layout/colorPalette/styleNotes 可中英混合，但仅用于描述画面，不是海报上的可读文字
-      - title/points 必须紧扣用户主题，短句化，适合小红书
-      - **控制文字量**：title 8-14字；points 固定 3 条，每条 6-12字；callout 10字以内；stickyNotes 最多 2 条
-      - 海报上总中文不超过 60 字，字少才清晰，不要堆砌信息
-      - stickyNotes 可选，最多 2 条短词；handwrittenAccent 可选，最多 8 字
-      - sceneDescription 用英文，描述与主题相关的真实场景，供生图模型绘制
-      - layout/colorPalette/platformStyle/aspectRatio 必填
-      - 字符串里的引号用中文「」，不要用英文双引号
-      """;
+  private static final String CREATIVE_IMAGE_SKILL = "cardflow.creative-image-generator";
+  private static final String KNOWLEDGE_POSTER_SKILL = "cardflow.knowledge-poster-generator";
+  private static final int RETRY_MAX_TOKENS = 8192;
 
   private final String modelName;
   private final int maxTokens;
@@ -115,7 +64,7 @@ public class GenerationService {
     KnowledgePosterValidator knowledgePosterValidator,
     ObjectMapper objectMapper,
     @Value("${spring.ai.openai.chat.options.model:deepseek-v4-flash}") String modelName,
-    @Value("${spring.ai.openai.chat.options.max-tokens:2048}") int maxTokens
+    @Value("${spring.ai.openai.chat.options.max-tokens:4096}") int maxTokens
   ) {
     this.jdbc = jdbc;
     this.properties = properties;
@@ -171,26 +120,26 @@ public class GenerationService {
     try {
       String contentJson;
       if (isKnowledgePosterMode(request)) {
-        contentJson = chatClient.prompt()
-          .system(KNOWLEDGE_POSTER_SYSTEM_PROMPT)
-          .user(buildKnowledgePosterUserPrompt(request))
-          .call()
-          .content();
-        knowledgePosterValidator.validate(objectMapper.readTree(contentJson));
+        contentJson = generateValidated(
+          buildKnowledgePosterSystemPrompt(),
+          buildKnowledgePosterUserPrompt(request),
+          knowledgePosterValidator::validate,
+          "文案精简"
+        );
       } else if (isCreativeImageMode(request)) {
-        contentJson = chatClient.prompt()
-          .system(CREATIVE_IMAGE_SYSTEM_PROMPT)
-          .user(buildCreativeImageUserPrompt(request))
-          .call()
-          .content();
-        creativeImageValidator.validate(objectMapper.readTree(contentJson));
+        contentJson = generateValidated(
+          buildCreativeImageSystemPrompt(),
+          buildCreativeImageUserPrompt(request),
+          creativeImageValidator::validate,
+          "描述精简"
+        );
       } else {
-        contentJson = chatClient.prompt()
-          .system(buildSystemPrompt())
-          .user(buildUserPrompt(request))
-          .call()
-          .content();
-        validator.validate(objectMapper.readTree(contentJson));
+        contentJson = generateValidated(
+          buildSystemPrompt(),
+          buildUserPrompt(request),
+          validator::validate,
+          "html/CSS 精简、模块≤6"
+        );
       }
       String finishedAt = Instant.now().toString();
       jdbc.update("update generate_task set status = ?, finished_at = ? where id = ?", "succeeded", finishedAt, taskId);
@@ -213,6 +162,78 @@ public class GenerationService {
     } finally {
       LlmCallContext.clear();
     }
+  }
+
+  private String generateValidated(
+    String systemPrompt,
+    String userPrompt,
+    Consumer<JsonNode> validator,
+    String compactHint
+  ) {
+    String contentJson = callLlm(systemPrompt, userPrompt, maxTokens);
+    try {
+      validator.accept(parseContentJson(contentJson));
+      return contentJson;
+    } catch (Exception e) {
+      if (!isJsonTruncationError(e) || !shouldRetryTruncatedOutput(LlmCallContext.snapshot(), maxTokens)) {
+        throw e;
+      }
+      log.warn(
+        "LLM output likely truncated at maxTokens={} completionTokens={}, retrying with {}",
+        maxTokens,
+        LlmCallContext.snapshot().completionTokens(),
+        RETRY_MAX_TOKENS
+      );
+      String retryPrompt = userPrompt + """
+
+          重要：上次输出因长度限制被截断。请重新生成完整 JSON，保持 %s，确保一次输出完整闭合。
+          """.formatted(compactHint);
+      contentJson = callLlm(systemPrompt, retryPrompt, RETRY_MAX_TOKENS);
+      validator.accept(parseContentJson(contentJson));
+      return contentJson;
+    }
+  }
+
+  private JsonNode parseContentJson(String contentJson) {
+    try {
+      return objectMapper.readTree(contentJson);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private String callLlm(String systemPrompt, String userPrompt, int tokenLimit) {
+    return chatClient.prompt()
+      .options(OpenAiChatOptions.builder().maxTokens(tokenLimit).build())
+      .system(systemPrompt)
+      .user(userPrompt)
+      .call()
+      .content();
+  }
+
+  private static boolean shouldRetryTruncatedOutput(LlmCallStats stats, int tokenLimit) {
+    if (stats == null || stats.callCount() <= 0) {
+      return true;
+    }
+    return stats.completionTokens() >= (int) (tokenLimit * 0.95);
+  }
+
+  private static boolean isJsonTruncationError(Throwable error) {
+    Throwable current = error;
+    while (current != null) {
+      if (current instanceof JsonEOFException) {
+        return true;
+      }
+      String message = current.getMessage();
+      if (message != null && (
+        message.contains("Unexpected end-of-input")
+          || message.contains("was expecting closing quote")
+      )) {
+        return true;
+      }
+      current = current.getCause();
+    }
+    return false;
   }
 
   private void recordUsage(String taskId, String finishedAt) {
@@ -259,6 +280,49 @@ public class GenerationService {
         """;
   }
 
+  private String buildCreativeImageSystemPrompt() {
+    return skillRegistry.readFullContent(CREATIVE_IMAGE_SKILL) + """
+
+        ## 字符串引号规则
+        - 字段值里的引号用中文「」,不要用英文双引号 "
+        """;
+  }
+
+  private String buildKnowledgePosterSystemPrompt() {
+    return skillRegistry.readFullContent(KNOWLEDGE_POSTER_SKILL) + """
+
+        ## 字符串引号规则
+        - 字段值里的引号用中文「」,不要用英文双引号 "
+        """;
+  }
+
+  private ImageStyle resolveStyle(GenerateContentRequest request) {
+    return ImageStylePresets.resolve(lookupStyleKey(request.templateId()));
+  }
+
+  private String lookupStyleKey(String templateId) {
+    if (templateId == null || templateId.isBlank()) {
+      return "xiaohongshu_highlight";
+    }
+    try {
+      return jdbc.queryForObject(
+        "select style_key from template where id = ?",
+        String.class,
+        templateId
+      );
+    } catch (Exception ignored) {
+      return "xiaohongshu_highlight";
+    }
+  }
+
+  private String styleBlock(ImageStyle style, String modeGuidance) {
+    return """
+        封面风格：%s（styleKey=%s）
+        Palette：%s · Rendering：%s
+        风格约束：%s
+        """.formatted(style.displayName(), style.key(), style.palette(), style.rendering(), modeGuidance);
+  }
+
   private String buildUserPrompt(GenerateContentRequest request) {
     if ("article".equals(request.generationMode())) {
       return "请根据下面文章生成 CardFlow html_card JSON：\n" + safe(request.articleInput() == null ? "" : request.articleInput().body());
@@ -276,22 +340,27 @@ public class GenerationService {
 
   private String buildKnowledgePosterUserPrompt(GenerateContentRequest request) {
     OutputSpec output = posterOutputSpec(request.outputFormat());
+    ImageStyle style = resolveStyle(request).forKnowledgePoster();
+    String styleSection = styleBlock(style, style.knowledgePosterGuidance());
     if ("article".equals(request.generationMode())) {
       return """
-          请根据下面文章生成一张 AI 知识海报 JSON（一次性出整图，含标题、4要点、场景描述）：
+          请根据下面文章生成一张 AI 知识海报 JSON（一次性出整图，含标题、3要点、场景描述）：
+          %s
           平台规格：%s
           画面比例：%s
           海报策略：%s
           文章正文：
           %s
           """.formatted(
+          styleSection,
           output.label(), output.aspectRatio(), output.strategy(),
           safe(request.articleInput() == null ? "" : request.articleInput().body())
       );
     }
     TopicInput topic = request.topicInput();
     return """
-        请根据下面主题生成一张 AI 知识海报 JSON（一次性出整图，含标题、4要点、场景描述）：
+        请根据下面主题生成一张 AI 知识海报 JSON（一次性出整图，含标题、3要点、场景描述）：
+        %s
         平台规格：%s
         画面比例：%s
         海报策略：%s
@@ -299,6 +368,7 @@ public class GenerationService {
         副标题或上下文：%s
         补充说明：%s
         """.formatted(
+        styleSection,
         output.label(), output.aspectRatio(), output.strategy(),
         safe(topic == null ? "" : topic.title()),
         safe(topic == null ? "" : topic.subtitle()),
@@ -323,15 +393,19 @@ public class GenerationService {
 
   private String buildCreativeImageUserPrompt(GenerateContentRequest request) {
     OutputSpec output = creativeOutputSpec(request.outputFormat());
+    ImageStyle style = resolveStyle(request);
+    String styleSection = styleBlock(style, style.creativeImageGuidance());
     if ("article".equals(request.generationMode())) {
       return """
           请根据下面文章生成一张与核心观点强关联的 AI 创意封面 prompt JSON：
+          %s
           平台规格：%s
           画面比例：%s
           封面策略：%s
           文章正文：
           %s
           """.formatted(
+          styleSection,
           output.label(), output.aspectRatio(), output.strategy(),
           safe(request.articleInput() == null ? "" : request.articleInput().body())
       );
@@ -339,6 +413,7 @@ public class GenerationService {
     TopicInput topic = request.topicInput();
     return """
         请根据下面主题生成一张与标题强关联的 AI 创意封面 prompt JSON：
+        %s
         平台规格：%s
         画面比例：%s
         封面策略：%s
@@ -346,6 +421,7 @@ public class GenerationService {
         副标题或上下文（写入 JSON 的 subtitle）：%s
         补充说明：%s
         """.formatted(
+        styleSection,
         output.label(), output.aspectRatio(), output.strategy(),
         safe(topic == null ? "" : topic.title()),
         safe(topic == null ? "" : topic.subtitle()),
@@ -371,8 +447,11 @@ public class GenerationService {
   private String buildTopicPrompt(GenerateContentRequest request) {
     TopicInput topic = request.topicInput();
     OutputSpec output = outputSpec(request.outputFormat());
+    ImageStyle style = resolveStyle(request);
+    String styleSection = styleBlock(style, style.htmlCardGuidance());
     return """
         请根据下面主题生成一张动态 HTML 信息卡片 json：
+        %s
         平台规格：%s
         画布宽高：%dpx × %dpx
         内容策略：%s
@@ -380,6 +459,7 @@ public class GenerationService {
         副标题或上下文：%s
         补充说明：%s
         """.formatted(
+        styleSection,
         output.label(), output.width(), output.height(), output.strategy(),
         safe(topic == null ? "" : topic.title()),
         safe(topic == null ? "" : topic.subtitle()),

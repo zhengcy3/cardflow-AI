@@ -1,0 +1,7 @@
+name: cardflow.creative-image-generator
+description: 生成 ai_creative_image 结构化 JSON，供 MiniMax 文生图输出创意封面
+whenToApply: renderMode=ai_creative_image 时
+tags:
+  - creative_image
+  - minimax
+version: 1

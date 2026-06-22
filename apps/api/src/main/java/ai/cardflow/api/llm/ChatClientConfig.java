@@ -23,7 +23,7 @@ public class ChatClientConfig {
     OpenAiApi deepSeekApi,
     @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.chat.options.model:deepseek-v4-flash}") String model,
     @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.chat.options.temperature:0.85}") double temperature,
-    @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.chat.options.max-tokens:2048}") int maxTokens
+    @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.chat.options.max-tokens:4096}") int maxTokens
   ) {
     OpenAiChatOptions options = OpenAiChatOptions.builder()
       .model(model)

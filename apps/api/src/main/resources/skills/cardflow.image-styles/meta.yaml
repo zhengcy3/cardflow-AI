@@ -1,0 +1,8 @@
+name: cardflow.image-styles
+description: CardFlow 九套图片风格目录（Palette × Rendering），含自动选型规则
+whenToApply: 用户选择封面风格、需要确定 colorPalette/styleNotes 或 read_skill 查询风格细节时
+tags:
+  - style
+  - image
+  - palette
+version: 1

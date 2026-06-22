@@ -30,6 +30,43 @@ class SkillContentSanityTest {
     // Brief originally used "禁止 script"; SKILL.md actually says "不允许 script" (same meaning).
     // Match the on-disk wording to avoid false regressions.
     assertThat(content).contains("不允许 script").doesNotContain("placeholder");
+    assertThat(content).contains("styleKey");
+  }
+
+  @Test
+  void imageStylesSkillContainsNinePresets() throws Exception {
+    String content = StreamUtils.copyToString(
+      new ClassPathResource("skills/cardflow.image-styles/SKILL.md").getInputStream(),
+      StandardCharsets.UTF_8
+    );
+
+    assertThat(content).contains("xiaohongshu_highlight");
+    assertThat(content).contains("swiss_grid");
+    assertThat(content).contains("bold_cover");
+    assertThat(content).contains("九套预设");
+  }
+
+  @Test
+  void creativeImageSkillContainsKind() throws Exception {
+    String content = StreamUtils.copyToString(
+      new ClassPathResource("skills/cardflow.creative-image-generator/SKILL.md").getInputStream(),
+      StandardCharsets.UTF_8
+    );
+
+    assertThat(content).contains("ai_creative_image");
+    assertThat(content).contains("visualMetaphor");
+  }
+
+  @Test
+  void knowledgePosterSkillContainsKind() throws Exception {
+    String content = StreamUtils.copyToString(
+      new ClassPathResource("skills/cardflow.knowledge-poster-generator/SKILL.md").getInputStream(),
+      StandardCharsets.UTF_8
+    );
+
+    assertThat(content).contains("ai_knowledge_poster");
+    assertThat(content).contains("简体中文");
+    assertThat(content).contains("禁止重叠");
   }
 
   @Test

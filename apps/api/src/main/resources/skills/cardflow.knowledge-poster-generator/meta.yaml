@@ -1,0 +1,7 @@
+name: cardflow.knowledge-poster-generator
+description: 生成 ai_knowledge_poster 结构化 JSON，供 MiniMax 一次性输出带版式的中文知识海报
+whenToApply: renderMode=ai_knowledge_poster 时
+tags:
+  - knowledge_poster
+  - minimax
+version: 1

@@ -239,7 +239,7 @@ public class ProjectService {
 
   private String renderAiImage(ProjectResponse project, String projectId, Path outputDir, String now) throws IOException {
     JsonNode content = objectMapper.readTree(project.contentJson());
-    String prompt = toAiImagePrompt(project.renderMode(), content, project.ratio());
+    String prompt = toAiImagePrompt(project.renderMode(), content, project.ratio(), project.templateId());
     if (prompt.isBlank()) {
       throw new IllegalStateException("作品缺少生图 prompt，请重新生成内容。");
     }
@@ -280,20 +280,35 @@ public class ProjectService {
     return new ImageGenerationRequest(prompt, aspectRatio);
   }
 
-  private String toAiImagePrompt(String renderMode, JsonNode content, String ratio) {
+  private String toAiImagePrompt(String renderMode, JsonNode content, String ratio, String templateId) {
     if ("ai_knowledge_poster".equals(renderMode)) {
-      return KnowledgePosterPromptComposer.toMiniMaxPrompt(enrichPosterContent(content, ratio));
+      return KnowledgePosterPromptComposer.toMiniMaxPrompt(enrichPosterContent(content, ratio, templateId));
     }
     return CreativeImagePromptComposer.toMiniMaxPrompt(content);
   }
 
-  private JsonNode enrichPosterContent(JsonNode content, String ratio) {
-    if (!content.path("aspectRatio").asText("").isBlank()) {
-      return content;
-    }
+  private JsonNode enrichPosterContent(JsonNode content, String ratio, String templateId) {
     var enriched = ((com.fasterxml.jackson.databind.node.ObjectNode) content.deepCopy());
-    enriched.put("aspectRatio", AspectRatioMapper.fromOutputFormat(ratio));
+    if (content.path("aspectRatio").asText("").isBlank()) {
+      enriched.put("aspectRatio", AspectRatioMapper.fromOutputFormat(ratio));
+    }
+    enriched.put("styleKey", lookupStyleKey(templateId));
     return enriched;
+  }
+
+  private String lookupStyleKey(String templateId) {
+    if (templateId == null || templateId.isBlank()) {
+      return "xiaohongshu_highlight";
+    }
+    try {
+      return jdbc.queryForObject(
+        "select style_key from template where id = ?",
+        String.class,
+        templateId
+      );
+    } catch (Exception ignored) {
+      return "xiaohongshu_highlight";
+    }
   }
 
   /**

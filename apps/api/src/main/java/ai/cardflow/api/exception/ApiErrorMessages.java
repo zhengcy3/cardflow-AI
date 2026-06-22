@@ -59,6 +59,9 @@ public final class ApiErrorMessages {
     if (lower.contains("failed to serialize json")) {
       return "内容处理失败，请稍后重试。";
     }
+    if (lower.contains("unexpected end-of-input") || lower.contains("jsoneofexception")) {
+      return "AI 生成内容过长被截断，请缩短输入或简化主题后重试。";
+    }
     if (normalized.contains("html_card") || normalized.contains("DeepSeek 返回")) {
       return normalized;
     }
